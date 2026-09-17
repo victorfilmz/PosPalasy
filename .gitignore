@@ -1,0 +1,42 @@
+# ---------- .NET / build ----------
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+[Pp]ublish/
+*.trx
+TestResults/
+
+# ---------- NuGet ----------
+*.nupkg
+packages/
+!.nuget/NuGet.Config
+
+# ---------- IDE / editor ----------
+.vs/
+.idea/
+.vscode/
+*.user
+*.suo
+*.userprefs
+
+# ---------- Secretos y certificados digitales (NUNCA versionar) ----------
+*.pfx
+*.p12
+*.pem
+*.key
+*.snk
+certificados/
+.env
+.env.*
+
+# ---------- Sistema operativo ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---------- Tooling local de agentes IA (artefactos de entorno) ----------
+.agents/
+.freebuff/
+docs/superpowers/

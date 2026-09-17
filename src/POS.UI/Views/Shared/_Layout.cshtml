@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>@ViewData["Title"] - PosPalasy Fiscal POS</title>
+    <link rel="icon" type="image/svg+xml" href="~/images/favicon.svg" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+</head>
+<body>
+    <div id="app-shell">
+        <!-- Sidebar Colapsable -->
+        <aside id="pos-sidebar">
+            <div class="sidebar-brand-box">
+                <a asp-controller="Dashboard" asp-action="Index" class="brand-full" title="PosPalasy POS">
+                    <img src="~/images/logo.svg" height="42" alt="PosPalasy Fiscal POS" />
+                </a>
+                <a asp-controller="Dashboard" asp-action="Index" class="brand-collapsed-icon" title="PosPalasy POS">
+                    <img src="~/images/logo-icon.svg" height="38" alt="PosPalasy" />
+                </a>
+            </div>
+
+            <div class="sidebar-menu">
+                <!-- Terminal POS Principal CTA -->
+                <a asp-controller="Pos" asp-action="Index" class="sidebar-link sidebar-link-pos @(ViewContext.RouteData.Values["controller"]?.ToString() == "Pos" ? "active" : "")">
+                    <i class="bi bi-cart3"></i>
+                    <span class="link-text">Terminal POS</span>
+                    <span class="link-badge badge bg-warning text-dark ms-auto" style="font-size: 0.65rem;">EN VIVO</span>
+                </a>
+
+                <!-- Grupo 1: Operaciones de Caja -->
+                <div class="nav-group-title">Operaciones de Caja</div>
+                <a asp-controller="Caja" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Caja" ? "active" : "")" title="Turnos y Cuadre de Caja">
+                    <i class="bi bi-safe2"></i>
+                    <span class="link-text">Turnos y Cuadre</span>
+                </a>
+
+                <!-- Grupo 2: Inventario y Existencias -->
+                <div class="nav-group-title">Inventario y Stock</div>
+                <a asp-controller="Inventario" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Inventario" && ViewContext.RouteData.Values["action"]?.ToString() == "Index" ? "active" : "")" title="Catálogo de Productos">
+                    <i class="bi bi-box-seam"></i>
+                    <span class="link-text">Catálogo de Productos</span>
+                </a>
+                <a asp-controller="Inventario" asp-action="Crear" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Inventario" && ViewContext.RouteData.Values["action"]?.ToString() == "Crear" ? "active" : "")" title="Nuevo Producto">
+                    <i class="bi bi-plus-circle"></i>
+                    <span class="link-text">Nuevo Producto</span>
+                </a>
+                <a asp-controller="Inventario" asp-action="Kardex" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Inventario" && ViewContext.RouteData.Values["action"]?.ToString() == "Kardex" ? "active" : "")" title="Kardex de Movimientos">
+                    <i class="bi bi-clock-history"></i>
+                    <span class="link-text">Kardex de Movimientos</span>
+                </a>
+
+                <!-- Grupo 3: Facturación Fiscal e-CF -->
+                <div class="nav-group-title">Facturación Fiscal e-CF</div>
+                <a asp-controller="Facturacion" asp-action="Lista" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Facturacion" && ViewContext.RouteData.Values["action"]?.ToString() == "Lista" ? "active" : "")" title="Comprobantes e-CF">
+                    <i class="bi bi-receipt"></i>
+                    <span class="link-text">Comprobantes e-CF</span>
+                </a>
+                <a asp-controller="Facturacion" asp-action="Emitir" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Facturacion" && ViewContext.RouteData.Values["action"]?.ToString() == "Emitir" ? "active" : "")" title="Emisión Manual">
+                    <i class="bi bi-file-earmark-plus"></i>
+                    <span class="link-text">Emisión Manual B01/B02</span>
+                </a>
+                <a asp-controller="Facturacion" asp-action="Anulaciones" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Facturacion" && ViewContext.RouteData.Values["action"]?.ToString() == "Anulaciones" ? "active" : "")" title="Anulaciones ANECF">
+                    <i class="bi bi-shield-slash"></i>
+                    <span class="link-text">Anulaciones (ANECF)</span>
+                </a>
+
+                <!-- Grupo 4: Reportes Fiscales y Métricas -->
+                <div class="nav-group-title">Contabilidad y DGII</div>
+                <a asp-controller="Dashboard" asp-action="Index" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Dashboard" ? "active" : "")" title="Dashboard">
+                    <i class="bi bi-speedometer2"></i>
+                    <span class="link-text">Dashboard Métricas</span>
+                </a>
+                <a asp-controller="Reportes" asp-action="Ventas607" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Reportes" && ViewContext.RouteData.Values["action"]?.ToString() == "Ventas607" ? "active" : "")" title="Libro de Ventas 607">
+                    <i class="bi bi-file-earmark-spreadsheet"></i>
+                    <span class="link-text">Libro Ventas 607</span>
+                </a>
+                <a asp-controller="Reportes" asp-action="ResumenItbis" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Reportes" && ViewContext.RouteData.Values["action"]?.ToString() == "ResumenItbis" ? "active" : "")" title="Resumen IT-1 (ITBIS)">
+                    <i class="bi bi-calculator"></i>
+                    <span class="link-text">Resumen IT-1</span>
+                </a>
+
+                <!-- Grupo 5: Configuración -->
+                <div class="nav-group-title">Configuración y Sistema</div>
+                <a asp-controller="Configuracion" asp-action="Empresa" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Configuracion" && ViewContext.RouteData.Values["action"]?.ToString() == "Empresa" ? "active" : "")" title="Datos de la Empresa">
+                    <i class="bi bi-building"></i>
+                    <span class="link-text">Datos de la Empresa</span>
+                </a>
+                <a asp-controller="Configuracion" asp-action="FacturaFisica" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Configuracion" && ViewContext.RouteData.Values["action"]?.ToString() == "FacturaFisica" ? "active" : "")" title="Diseño de Factura Física">
+                    <i class="bi bi-printer"></i>
+                    <span class="link-text">Factura Física / Ticket</span>
+                </a>
+                <a asp-controller="Configuracion" asp-action="Certificado" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Configuracion" && ViewContext.RouteData.Values["action"]?.ToString() == "Certificado" ? "active" : "")" title="Certificado Digital DGII">
+                    <i class="bi bi-shield-lock"></i>
+                    <span class="link-text">Certificado Digital DGII</span>
+                </a>
+            </div>
+
+            <div class="sidebar-footer">
+                <span class="font-tabular text-muted">Ley 32-23 • Norma 01-20</span>
+                <i class="bi bi-check-circle-fill text-success" title="Sistema Conforme"></i>
+            </div>
+        </aside>
+
+        <!-- Main Content Wrapper -->
+        <div id="pos-main-wrapper">
+            <!-- Topbar Unificado -->
+            <header id="pos-topbar">
+                <div class="topbar-left">
+                    <button type="button" id="btnSidebarToggle" class="btn-sidebar-toggle" title="Colapsar o expandir menú lateral (Ctrl+B)">
+                        <i class="bi bi-layout-sidebar-inset fs-5"></i>
+                    </button>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="fw-bold fs-6 text-slate-800 d-none d-sm-inline">PosPalasy</span>
+                        <span class="text-muted small d-none d-md-inline">• Facturación Fiscal Electrónica</span>
+                    </div>
+                </div>
+
+                <div class="topbar-right">
+                    <!-- Estado DGII en Vivo -->
+                    <div class="dgii-status-pill" title="Ambiente de Facturación Electrónica Activo">
+                        <span class="dgii-pulse"></span>
+                        <span>DGII En Línea <span class="d-none d-sm-inline">(TestECF)</span></span>
+                    </div>
+
+                    <!-- Badge de Cajero / Turno -->
+                    <div class="caja-shift-pill d-none d-md-flex align-items-center">
+                        <i class="bi bi-person-badge text-primary fs-6"></i>
+                        <span>Caja Principal</span>
+                        <span class="badge bg-success-subtle text-success border border-success-subtle ms-1" style="font-size: 0.7rem;">Turno Activo</span>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Main Body -->
+            <main role="main" class="flex-grow-1">
+                @if (TempData["Mensaje"] != null)
+                {
+                    <div class="container-fluid px-4 pt-3">
+                        <div class="alert alert-success alert-dismissible fade show shadow-sm border-0 d-flex align-items-center gap-2" role="alert">
+                            <i class="bi bi-check-circle-fill fs-5 text-success"></i>
+                            <div>@TempData["Mensaje"]</div>
+                            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert"></button>
+                        </div>
+                    </div>
+                }
+                @if (TempData["Error"] != null)
+                {
+                    <div class="container-fluid px-4 pt-3">
+                        <div class="alert alert-danger alert-dismissible fade show shadow-sm border-0 d-flex align-items-center gap-2" role="alert">
+                            <i class="bi bi-exclamation-triangle-fill fs-5 text-danger"></i>
+                            <div>@TempData["Error"]</div>
+                            <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert"></button>
+                        </div>
+                    </div>
+                }
+
+                @if (ViewContext.RouteData.Values["controller"]?.ToString() == "Pos")
+                {
+                    @RenderBody()
+                }
+                else
+                {
+                    <div class="container-fluid px-4 py-3">
+                        @RenderBody()
+                    </div>
+                }
+            </main>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Sidebar Toggle with LocalStorage persistence & Ctrl+B shortcut
+        (function() {
+            const sidebar = document.getElementById('pos-sidebar');
+            const mainWrapper = document.getElementById('pos-main-wrapper');
+            const toggleBtn = document.getElementById('btnSidebarToggle');
+
+            function applySidebarState(isCollapsed) {
+                if (isCollapsed) {
+                    sidebar.classList.add('sidebar-collapsed');
+                    mainWrapper.classList.add('sidebar-collapsed');
+                } else {
+                    sidebar.classList.remove('sidebar-collapsed');
+                    mainWrapper.classList.remove('sidebar-collapsed');
+                }
+            }
+
+            // Restore from localStorage
+            const savedState = localStorage.getItem('pos_sidebar_collapsed');
+            if (savedState === 'true') {
+                applySidebarState(true);
+            }
+
+            if (toggleBtn) {
+                toggleBtn.addEventListener('click', function() {
+                    const isCollapsed = sidebar.classList.toggle('sidebar-collapsed');
+                    mainWrapper.classList.toggle('sidebar-collapsed', isCollapsed);
+                    localStorage.setItem('pos_sidebar_collapsed', isCollapsed);
+                });
+            }
+
+            // Hotkey Ctrl+B to toggle sidebar
+            document.addEventListener('keydown', function(e) {
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+                    e.preventDefault();
+                    if (toggleBtn) toggleBtn.click();
+                }
+            });
+        })();
+    </script>
+    @await RenderSectionAsync("Scripts", required: false)
+</body>
+</html>

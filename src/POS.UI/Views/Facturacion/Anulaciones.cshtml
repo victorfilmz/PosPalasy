@@ -1,0 +1,110 @@
+@model IEnumerable<POS.Domain.Entities.Anulacion>
+
+@{
+    ViewData["Title"] = "Anulaciones e-CF (ANECF)";
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <h3 class="fw-bold text-dark mb-0">Anulaciones de Comprobantes (ANECF)</h3>
+            <span class="badge bg-danger-subtle text-danger border border-danger-subtle font-tabular">DGII Oficial</span>
+        </div>
+        <p class="text-muted small mb-0">Registro oficial de solicitudes de anulación transmitidas a la DGII según normativa e-CF</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="Lista" class="btn btn-outline-primary fw-semibold d-flex align-items-center gap-2">
+            <i class="bi bi-receipt"></i>Ver Facturas Emitidas
+        </a>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table-pos mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-4">e-NCF Rango</th>
+                        <th>Tipo e-CF</th>
+                        <th>Cant.</th>
+                        <th>Fecha Solicitud</th>
+                        <th>Motivo</th>
+                        <th>TrackId DGII</th>
+                        <th>Estatus DGII</th>
+                        <th class="text-end pe-4">Detalles</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model == null || !Model.Any())
+                    {
+                        <tr>
+                            <td colspan="8" class="text-center py-5 text-muted">
+                                <i class="bi bi-shield-slash fs-1 d-block mb-2 text-secondary"></i>
+                                No hay registros de anulación de comprobantes.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        foreach (var anula in Model)
+                        {
+                            var rango = anula.eNCFDesde == anula.eNCFHasta 
+                                ? anula.eNCFDesde 
+                                : $"{anula.eNCFDesde} al {anula.eNCFHasta}";
+
+                            <tr>
+                                <td class="ps-4 fw-bold font-monospace text-danger">@rango</td>
+                                <td><span class="badge bg-light text-dark border">Tipo @((int)anula.TipoeCF)</span></td>
+                                <td><span class="badge bg-secondary-subtle text-secondary border font-tabular">@anula.CantidadSecuencias</span></td>
+                                <td class="text-muted small font-tabular">@anula.FechaSolicitud.ToLocalTime().ToString("dd/MM/yy hh:mm tt")</td>
+                                <td>
+                                    <span class="d-block text-truncate" style="max-width: 250px;" title="@anula.Motivo">
+                                        @anula.Motivo
+                                    </span>
+                                </td>
+                                <td>
+                                    <code class="small text-dark font-monospace">@(string.IsNullOrEmpty(anula.TrackId) ? "No asignado" : anula.TrackId)</code>
+                                </td>
+                                <td>
+                                    @if (anula.Aprobada)
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                            <i class="bi bi-check-circle me-1"></i>Aceptada DGII
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning-subtle text-dark border border-warning-subtle">
+                                            <i class="bi bi-clock me-1"></i>Registrada Local
+                                        </span>
+                                    }
+                                </td>
+                                <td class="text-end pe-4">
+                                    <button type="button" class="btn btn-sm btn-outline-secondary fw-semibold" data-bs-toggle="modal" data-bs-target="#modalXml@(anula.Id)">
+                                        <i class="bi bi-filetype-xml me-1"></i>XML
+                                    </button>
+                                </td>
+                            </tr>
+
+                            <!-- Modal XML ANECF -->
+                            <div class="modal fade" id="modalXml@(anula.Id)" tabindex="-1" aria-hidden="true">
+                                <div class="modal-dialog modal-lg modal-dialog-centered">
+                                    <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                                        <div class="modal-header bg-slate-900 text-white py-3 px-4" style="background: #0f172a;">
+                                            <h5 class="modal-title fw-bold text-white"><i class="bi bi-file-code me-2 text-primary"></i>XML Oficial ANECF - @rango</h5>
+                                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body p-0">
+                                            <pre class="bg-dark text-light p-4 mb-0 font-monospace small" style="max-height: 420px; overflow-y: auto;"><code>@anula.XMLContent</code></pre>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

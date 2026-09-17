@@ -1,0 +1,299 @@
+@model POS.Application.DTOs.ConfiguracionFacturaFisicaDto
+@{
+    ViewData["Title"] = "Configuración de Factura Física";
+    var enterprise = ViewBag.Enterprise as POS.Domain.Entities.Enterprise;
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <h3 class="fw-bold text-dark mb-0">Diseño y Formato de Ticket Impreso</h3>
+            <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Ticket Térmico DGII</span>
+        </div>
+        <p class="text-muted small mb-0">Personalice el aspecto de las facturas impresas para sus clientes (impresoras térmicas ESC/POS de 80mm o 58mm)</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="Empresa" class="btn btn-outline-secondary fw-semibold d-flex align-items-center gap-2">
+            <i class="bi bi-building"></i>Datos de Empresa
+        </a>
+        <a asp-action="Certificado" class="btn btn-outline-secondary fw-semibold d-flex align-items-center gap-2">
+            <i class="bi bi-shield-lock"></i>Certificado Digital
+        </a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Formulario de Configuración -->
+    <div class="col-lg-6">
+        <div class="card border-0 shadow-sm rounded-4 bg-white overflow-hidden mb-4">
+            <div class="card-header bg-white py-3 px-4 border-bottom">
+                <h6 class="fw-bold mb-0 text-slate-800"><i class="bi bi-sliders me-2 text-primary"></i>Parámetros del Ticket Térmico</h6>
+            </div>
+            <div class="card-body p-4">
+                <form asp-action="GuardarFacturaFisica" method="post" id="formFacturaFisica">
+                    
+                    <!-- Selector de Ancho de Papel -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold small text-slate-700">Ancho del Rollo de Papel Térmico</label>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <label class="card h-100 p-3 border rounded-3 cursor-pointer text-center paper-opt @(Model.AnchoPapelMm == 80 ? "border-primary bg-primary-subtle text-primary" : "bg-light")" style="cursor: pointer;">
+                                    <input type="radio" name="AnchoPapelMm" value="80" class="d-none" @(Model.AnchoPapelMm == 80 ? "checked" : "") onchange="updatePreview()" />
+                                    <i class="bi bi-receipt fs-2 mb-1 d-block"></i>
+                                    <span class="fw-bold d-block">80 mm (Estándar)</span>
+                                    <span class="small text-muted" style="font-size: 11px;">Impresora POS de mostrador (Epson, Star, Bixolon)</span>
+                                </label>
+                            </div>
+                            <div class="col-6">
+                                <label class="card h-100 p-3 border rounded-3 cursor-pointer text-center paper-opt @(Model.AnchoPapelMm == 58 ? "border-primary bg-primary-subtle text-primary" : "bg-light")" style="cursor: pointer;">
+                                    <input type="radio" name="AnchoPapelMm" value="58" class="d-none" @(Model.AnchoPapelMm == 58 ? "checked" : "") onchange="updatePreview()" />
+                                    <i class="bi bi-phone fs-2 mb-1 d-block"></i>
+                                    <span class="fw-bold d-block">58 mm (Compacto)</span>
+                                    <span class="small text-muted" style="font-size: 11px;">Terminales móviles o mini impresoras Bluetooth</span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Mostrar Logo -->
+                    <div class="mb-3">
+                        <div class="form-check form-switch p-2 bg-light rounded border">
+                            <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="switchLogo" name="MostrarLogoTicket" value="true" @(Model.MostrarLogoTicket ? "checked" : "") onchange="updatePreview()" />
+                            <label class="form-check-label small fw-semibold" for="switchLogo">
+                                Imprimir logo comercial en el encabezado
+                            </label>
+                        </div>
+                        <small class="text-muted">Si se desactiva, solo se imprimirá el texto del nombre comercial.</small>
+                    </div>
+
+                    <!-- Mensaje de Encabezado Extra -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-slate-700">Mensaje o Leyenda Adicional en Encabezado (Opcional)</label>
+                        <input type="text" name="MensajeEncabezadoExtra" id="inputEncabezado" value="@Model.MensajeEncabezadoExtra" class="form-control" placeholder="Ej: Especialistas en repuestos y accesorios / Reg. Simplificado" oninput="updatePreview()" maxlength="120" />
+                        <small class="text-muted">Aparecerá centrado debajo de la dirección y teléfono.</small>
+                    </div>
+
+                    <!-- Copias por Venta -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-slate-700">Cantidad de Copias al Imprimir</label>
+                        <select name="CantidadCopiasTicket" id="selectCopias" class="form-select" onchange="updatePreview()">
+                            <option value="1" selected="@(Model.CantidadCopiasTicket <= 1)">1 Copia (Solo comprobante del cliente)</option>
+                            <option value="2" selected="@(Model.CantidadCopiasTicket == 2)">2 Copias (Original cliente + Copia establecimiento)</option>
+                        </select>
+                    </div>
+
+                    <!-- Política de Garantía y Devoluciones -->
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-slate-700">Política de Garantía y Devoluciones</label>
+                        <textarea name="PoliticaGarantiaTicket" id="inputGarantia" class="form-control" rows="3" placeholder="Ej: Plazo de garantía: 15 días con factura original. No se realizan devoluciones en efectivo." oninput="updatePreview()">@Model.PoliticaGarantiaTicket</textarea>
+                        <small class="text-muted">Impreso en tipografía compacta antes del código QR o al pie del ticket.</small>
+                    </div>
+
+                    <!-- Mensaje de Despedida / Pie -->
+                    <div class="mb-4">
+                        <label class="form-label fw-bold small text-slate-700">Mensaje de Despedida (Pie de Ticket)</label>
+                        <input type="text" name="MensajePieTicket" id="inputPie" value="@Model.MensajePieTicket" class="form-control fw-semibold" placeholder="¡GRACIAS POR SU COMPRA! VUELVA PRONTO" oninput="updatePreview()" />
+                    </div>
+
+                    <button type="submit" class="btn btn-primary fw-bold px-4 py-2 shadow-sm d-flex align-items-center gap-2">
+                        <i class="bi bi-check-circle"></i>Guardar Formato de Ticket
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Previsualizador Interactivo en Tiempo Real -->
+    <div class="col-lg-6">
+        <div class="sticky-top" style="top: 20px; z-index: 10;">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="fw-bold text-slate-700 small text-uppercase">
+                    <i class="bi bi-eye text-primary me-1"></i>Previsualización en Tiempo Real
+                </span>
+                <span id="previewBadgeWidth" class="badge bg-dark">80 mm</span>
+            </div>
+
+            <!-- Contenedor del Simulador Térmico -->
+            <div class="d-flex justify-content-center bg-light p-4 rounded-4 border shadow-inner" style="min-height: 540px;">
+                <div id="simulatedTicket" class="bg-white p-3 border shadow-sm" style="width: 300px; font-family: 'Courier New', Courier, monospace; font-size: 11px; color: #111; line-height: 1.3; transition: all 0.2s ease;">
+                    
+                    <!-- Logo Simulador -->
+                    <div id="prevLogo" class="text-center mb-2" style="display: @(Model.MostrarLogoTicket ? "block" : "none");">
+                        <img src="/images/logo-icon.svg" width="32" height="32" alt="Logo" style="filter: grayscale(100%);" />
+                    </div>
+
+                    <!-- Encabezado Empresa -->
+                    <div class="text-center">
+                        <div class="fw-bold uppercase" style="font-size: 13px;">@(enterprise?.NombreComercial ?? enterprise?.RazonSocial ?? "POSPALASY SRL")</div>
+                        <div style="font-size: 10px;">@enterprise?.RazonSocial</div>
+                        <div class="fw-bold" style="font-size: 11px;">RNC: @(enterprise?.RNC ?? "131234567")</div>
+                        <div style="font-size: 9.5px;">@(enterprise?.Direccion ?? "Av. Winston Churchill #109, Santo Domingo")</div>
+                        <div style="font-size: 9.5px;">Tel: @(enterprise?.Telefono ?? "809-555-0199")</div>
+                        <div id="prevEncabezadoExtra" style="font-size: 9px; font-style: italic; margin-top: 3px; display: @(string.IsNullOrWhiteSpace(Model.MensajeEncabezadoExtra) ? "none" : "block");">
+                            @Model.MensajeEncabezadoExtra
+                        </div>
+                    </div>
+
+                    <div style="border-bottom: 2px solid #000; margin: 8px 0;"></div>
+
+                    <!-- Datos Comprobante Fiscal -->
+                    <div class="text-center">
+                        <div class="fw-bold uppercase" style="font-size: 10px;">FACTURA ELECTRÓNICA DE CONSUMO (e-CF 32)</div>
+                        <div class="fw-bold" style="font-size: 13px; margin: 2px 0;">e-NCF: E320000000001</div>
+                        <div style="font-size: 9px;">Fecha: @DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss")</div>
+                    </div>
+
+                    <div style="border-bottom: 1px dashed #000; margin: 6px 0;"></div>
+
+                    <!-- Datos Cliente -->
+                    <div style="font-size: 10px;">
+                        <div><span class="fw-bold">Cliente:</span> Juan Pérez</div>
+                        <div><span class="fw-bold">Condición:</span> CONTADO / EFECTIVO</div>
+                    </div>
+
+                    <div style="border-bottom: 1px dashed #000; margin: 6px 0;"></div>
+
+                    <!-- Items Simulados -->
+                    <table style="width: 100%; font-size: 10px; border-collapse: collapse;">
+                        <thead>
+                            <tr style="border-bottom: 1px dashed #000;">
+                                <th style="text-align: left; padding: 2px 0;">ITEM</th>
+                                <th style="text-align: center; width: 30px;">CANT</th>
+                                <th style="text-align: right; width: 50px;">PRECIO</th>
+                                <th style="text-align: right; width: 55px;">TOTAL</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td colspan="4" class="fw-bold" style="padding-top: 3px;">CAFÉ PREMIUM MOLIDO 1LB (18%)</td>
+                            </tr>
+                            <tr>
+                                <td></td>
+                                <td style="text-align: center;">2</td>
+                                <td style="text-align: right;">350.00</td>
+                                <td style="text-align: right; font-weight: bold;">700.00</td>
+                            </tr>
+                            <tr>
+                                <td colspan="4" class="fw-bold" style="padding-top: 3px;">AGUA PURIFICADA 500ML (E)</td>
+                            </tr>
+                            <tr>
+                                <td></td>
+                                <td style="text-align: center;">1</td>
+                                <td style="text-align: right;">35.00</td>
+                                <td style="text-align: right; font-weight: bold;">35.00</td>
+                            </tr>
+                        </tbody>
+                    </table>
+
+                    <div style="border-bottom: 1px dashed #000; margin: 6px 0;"></div>
+
+                    <!-- Totales -->
+                    <table style="width: 100%; font-size: 10px;">
+                        <tr>
+                            <td>Subtotal:</td>
+                            <td style="text-align: right;">RD$ 735.00</td>
+                        </tr>
+                        <tr>
+                            <td>ITBIS (18%):</td>
+                            <td style="text-align: right;">RD$ 106.78</td>
+                        </tr>
+                        <tr style="font-size: 12px; font-weight: bold; border-top: 1px solid #000;">
+                            <td style="padding-top: 4px;">TOTAL:</td>
+                            <td style="text-align: right; padding-top: 4px;">RD$ 735.00</td>
+                        </tr>
+                    </table>
+
+                    <div style="border-bottom: 2px solid #000; margin: 8px 0;"></div>
+
+                    <!-- Datos Seguridad y QR Simulados -->
+                    <div class="text-center" style="font-size: 9px;">
+                        <div><span class="fw-bold">Seguridad e-CF:</span> 9F8A7B</div>
+                        <div class="my-2">
+                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&margin=2&data=https://ecf.dgii.gov.do/testecf/consultatimbre?RncEmisor=131234567" width="90" height="90" alt="QR DGII" />
+                        </div>
+                        <div style="font-size: 8px; color: #555;">Representación impresa de Comprobante Fiscal Electrónico DGII</div>
+                    </div>
+
+                    <!-- Política de Garantía Simulada -->
+                    <div id="prevGarantiaContainer" style="margin-top: 6px; border-top: 1px dashed #000; padding-top: 4px; font-size: 8px; line-height: 1.2; text-align: justify; display: @(string.IsNullOrWhiteSpace(Model.PoliticaGarantiaTicket) ? "none" : "block");">
+                        <span class="fw-bold">Garantía y Devoluciones:</span> <span id="prevGarantiaText">@Model.PoliticaGarantiaTicket</span>
+                    </div>
+
+                    <!-- Despedida Simulada -->
+                    <div id="prevPie" class="text-center fw-bold" style="font-size: 9.5px; margin-top: 8px;">
+                        @(string.IsNullOrWhiteSpace(Model.MensajePieTicket) ? "¡GRACIAS POR SU COMPRA!" : Model.MensajePieTicket)
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function updatePreview() {
+        // Ancho
+        const anchoRadio = document.querySelector('input[name="AnchoPapelMm"]:checked');
+        const anchoVal = anchoRadio ? parseInt(anchoRadio.value) : 80;
+        const ticketEl = document.getElementById('simulatedTicket');
+        const badgeEl = document.getElementById('previewBadgeWidth');
+        
+        // Estilo de tarjetas de seleccion de ancho
+        document.querySelectorAll('.paper-opt').forEach(opt => {
+            const radio = opt.querySelector('input[type="radio"]');
+            if (radio && radio.checked) {
+                opt.classList.add('border-primary', 'bg-primary-subtle', 'text-primary');
+                opt.classList.remove('bg-light');
+            } else {
+                opt.classList.remove('border-primary', 'bg-primary-subtle', 'text-primary');
+                opt.classList.add('bg-light');
+            }
+        });
+
+        if (anchoVal === 58) {
+            ticketEl.style.width = '220px';
+            ticketEl.style.fontSize = '9.5px';
+            badgeEl.innerText = '58 mm (Mini)';
+            badgeEl.className = 'badge bg-warning text-dark';
+        } else {
+            ticketEl.style.width = '300px';
+            ticketEl.style.fontSize = '11px';
+            badgeEl.innerText = '80 mm (Estándar)';
+            badgeEl.className = 'badge bg-dark';
+        }
+
+        // Logo
+        const switchLogo = document.getElementById('switchLogo');
+        const logoEl = document.getElementById('prevLogo');
+        logoEl.style.display = (switchLogo && switchLogo.checked) ? 'block' : 'none';
+
+        // Mensaje Encabezado Extra
+        const inputEnc = document.getElementById('inputEncabezado');
+        const prevEnc = document.getElementById('prevEncabezadoExtra');
+        if (inputEnc && inputEnc.value.trim().length > 0) {
+            prevEnc.innerText = inputEnc.value.trim();
+            prevEnc.style.display = 'block';
+        } else {
+            prevEnc.style.display = 'none';
+        }
+
+        // Garantia
+        const inputGar = document.getElementById('inputGarantia');
+        const prevGarContainer = document.getElementById('prevGarantiaContainer');
+        const prevGarText = document.getElementById('prevGarantiaText');
+        if (inputGar && inputGar.value.trim().length > 0) {
+            prevGarText.innerText = inputGar.value.trim();
+            prevGarContainer.style.display = 'block';
+        } else {
+            prevGarContainer.style.display = 'none';
+        }
+
+        // Pie
+        const inputPie = document.getElementById('inputPie');
+        const prevPie = document.getElementById('prevPie');
+        if (inputPie && inputPie.value.trim().length > 0) {
+            prevPie.innerText = inputPie.value.trim();
+        } else {
+            prevPie.innerText = '¡GRACIAS POR SU COMPRA!';
+        }
+    }
+</script>

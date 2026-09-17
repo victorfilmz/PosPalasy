@@ -1,0 +1,893 @@
+@model IEnumerable<POS.Domain.Entities.Producto>
+@using POS.Domain.Types
+@using POS.Domain.Enums
+
+@{
+    ViewData["Title"] = "Caja Terminal POS";
+    var enterprise = ViewBag.Enterprise as POS.Domain.Entities.Enterprise;
+    var clientes = ViewBag.Clientes as IEnumerable<POS.Domain.Entities.Cliente> ?? Enumerable.Empty<POS.Domain.Entities.Cliente>();
+    var sucursalActiva = ViewBag.SucursalActiva as POS.Domain.Entities.Sucursal;
+}
+
+<!-- Terminal POS Viewport 100vh Locked -->
+<div class="pos-viewport-locked">
+
+    <!-- PANEL IZQUIERDO: CATÁLOGO TÁCTIL Y BÚSQUEDA (62%) -->
+    <section class="pos-catalog-panel" aria-label="Catálogo de Productos">
+        <!-- Barra de Búsqueda y Filtros de Impuesto -->
+        <div class="pos-search-header">
+            <div class="d-flex align-items-center gap-2">
+                <div class="input-group">
+                    <span class="input-group-text bg-light border-end-0 text-muted">
+                        <i class="bi bi-search"></i>
+                    </span>
+                    <input type="text" id="busquedaInput" class="form-control bg-light border-start-0 ps-1" 
+                           placeholder="Buscar por código, nombre o pistola de código de barras... (F2)" 
+                           autofocus autocomplete="off" />
+                    <button class="btn btn-light border border-start-0 text-muted" type="button" id="btnBorrarBusqueda" title="Limpiar búsqueda">
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                </div>
+                <span class="badge bg-dark-subtle text-dark border px-2 py-2 font-tabular d-none d-md-inline" title="Atajo para buscar">
+                    F2
+                </span>
+            </div>
+
+            <!-- Filtros de Categoría / Tasa ITBIS -->
+            <div class="d-flex align-items-center gap-2 overflow-x-auto pb-1">
+                <button type="button" class="filter-pill active filter-btn" data-filter="all">
+                    <i class="bi bi-grid-fill me-1"></i>Todos los Productos
+                </button>
+                <button type="button" class="filter-pill filter-btn" data-filter="18">
+                    <span class="badge rounded-pill bg-primary me-1">18%</span>ITBIS General
+                </button>
+                <button type="button" class="filter-pill filter-btn" data-filter="16">
+                    <span class="badge rounded-pill bg-warning text-dark me-1">16%</span>ITBIS Reducido
+                </button>
+                <button type="button" class="filter-pill filter-btn" data-filter="0">
+                    <span class="badge rounded-pill bg-success me-1">0%</span>Exento
+                </button>
+            </div>
+        </div>
+
+        <!-- Grid de Tarjetas Táctiles de Productos con Scroll Independiente -->
+        <div class="pos-grid-scroll" id="contenedorScrollProductos">
+            <div class="row g-2" id="gridProductos">
+                @if (Model != null && Model.Any())
+                {
+                    foreach (var prod in Model)
+                    {
+                        var tasa = IndicadorFacturacionHelper.ObtenerTasaITBIS(prod.IndicadorFacturacion);
+                        var filterTag = prod.IndicadorFacturacion == IndicadorFacturacionType.ITBIS1_18 ? "18" :
+                                        prod.IndicadorFacturacion == IndicadorFacturacionType.ITBIS2_16 ? "16" : "0";
+                        var taxRibbonClass = prod.IndicadorFacturacion == IndicadorFacturacionType.ITBIS1_18 ? "tax-18" :
+                                             prod.IndicadorFacturacion == IndicadorFacturacionType.ITBIS2_16 ? "tax-16" : "tax-0";
+                        var badgeClass = prod.IndicadorFacturacion == IndicadorFacturacionType.ITBIS1_18 ? "badge-tax-18" :
+                                         prod.IndicadorFacturacion == IndicadorFacturacionType.ITBIS2_16 ? "badge-tax-16" : "badge-tax-0";
+                        var badgeText = prod.IndicadorFacturacion == IndicadorFacturacionType.ITBIS1_18 ? "ITBIS 18%" :
+                                        prod.IndicadorFacturacion == IndicadorFacturacionType.ITBIS2_16 ? "ITBIS 16%" : "Exento";
+                        var abreviatura = UnidadMedidaFormatter.GetAbreviatura(prod.UnidadMedida);
+
+                        <div class="col-6 col-sm-4 col-xl-3 item-producto-col" data-filter="@filterTag" data-codigo="@prod.Codigo.ToLower()" data-desc="@prod.Descripcion.ToLower()">
+                            <div class="touch-product-card @taxRibbonClass" 
+                                 onclick="agregarAlCarrito(@prod.Id, '@prod.Codigo', '@prod.Descripcion.Replace("'", "\\'")', @prod.PrecioUnitario, @((int)prod.IndicadorFacturacion), @tasa, @((int)prod.UnidadMedida), '@abreviatura', @prod.StockActual)"
+                                 role="button" tabindex="0" title="Click para agregar">
+                                
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span class="@badgeClass">@badgeText</span>
+                                    <span class="text-muted font-monospace small" style="font-size: 0.72rem;">#@prod.Codigo</span>
+                                </div>
+
+                                <div class="fw-bold text-dark text-truncate mb-1" title="@prod.Descripcion" style="font-size: 0.92rem;">
+                                    @prod.Descripcion
+                                </div>
+
+                                <div class="d-flex align-items-center gap-1 mb-1">
+                                    @if (prod.StockActual <= 0)
+                                    {
+                                        <span class="badge bg-danger-subtle text-danger border border-danger-subtle" style="font-size: 0.68rem;">Agotado (0)</span>
+                                    }
+                                    else if (prod.StockActual <= prod.StockMinimo)
+                                    {
+                                        <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle" style="font-size: 0.68rem;">Stock: @prod.StockActual.ToString("0.##")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 0.68rem;">Stock: @prod.StockActual.ToString("0.##")</span>
+                                    }
+                                    <span class="text-muted text-truncate" style="font-size: 0.7rem;">• @prod.Categoria</span>
+                                </div>
+
+                                <div class="d-flex justify-content-between align-items-end mt-auto pt-1">
+                                    <div>
+                                        <span class="text-muted small" style="font-size: 0.72rem;">Unidad: @abreviatura</span>
+                                        <div class="fw-bold text-primary font-tabular" style="font-size: 1.05rem;">
+                                            RD$ @prod.PrecioUnitario.ToString("N2")
+                                        </div>
+                                    </div>
+                                    <button class="btn btn-sm btn-primary rounded-circle d-flex align-items-center justify-content-center" 
+                                            style="width: 32px; height: 32px; pointer-events: none;" aria-label="Añadir">
+                                        <i class="bi bi-plus-lg"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="col-12 text-center py-5 text-muted">
+                        <i class="bi bi-box-seam fs-1 d-block mb-2 text-secondary"></i>
+                        No hay productos registrados en el catálogo.
+                    </div>
+                }
+            </div>
+        </div>
+    </section>
+
+    <!-- PANEL DERECHO: TICKET DIGITAL Y CAJA FISCAL (38%) -->
+    <section class="pos-ticket-panel" aria-label="Ticket de Venta">
+        <!-- Selector Fiscal de Comprobante e-CF -->
+        <div class="p-3 border-bottom bg-light">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="badge bg-white text-dark border shadow-xs">
+                    <i class="bi bi-geo-alt-fill me-1 text-primary"></i>@(sucursalActiva?.Nombre ?? "Casa Matriz")
+                </span>
+                <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-tabular" id="badgeTipoComp">
+                    e-CF 32 (Consumo)
+                </span>
+            </div>
+
+            <!-- Segmented Control de Comprobante -->
+            <div class="btn-group w-100 mb-2" role="group">
+                <input type="radio" class="btn-check" name="tipoCompRadio" id="radioE32" value="32" checked onchange="cambiarTipoComprobante(32)">
+                <label class="btn btn-sm btn-outline-primary fw-bold" for="radioE32">
+                    <i class="bi bi-person me-1"></i>Consumo (32)
+                </label>
+
+                <input type="radio" class="btn-check" name="tipoCompRadio" id="radioE31" value="31" onchange="cambiarTipoComprobante(31)">
+                <label class="btn btn-sm btn-outline-primary fw-bold" for="radioE31">
+                    <i class="bi bi-building me-1"></i>Crédito Fiscal (31)
+                </label>
+            </div>
+
+            <!-- Datos del Cliente / RNC Comprador -->
+            <div id="seccionCliente">
+                <div class="row g-1">
+                    <div class="col-5">
+                        <input type="text" id="rncClienteInput" class="form-control form-control-sm font-tabular" 
+                               placeholder="RNC / Cédula" maxlength="11" />
+                    </div>
+                    <div class="col-7">
+                        <input type="text" id="nombreClienteInput" class="form-control form-control-sm" 
+                               placeholder="Razón Social / Nombre" value="Consumidor Final" />
+                    </div>
+                </div>
+                <div id="alertaE31" class="text-danger small mt-1 d-none" style="font-size: 0.75rem;">
+                    <i class="bi bi-exclamation-circle me-1"></i>Para e-CF 31 el RNC es requerido por la DGII.
+                </div>
+            </div>
+        </div>
+
+        <!-- Lista de Items en el Ticket con Scroll Suave -->
+        <div class="pos-ticket-scroll" id="contenedorScrollTicket">
+            <div id="ticketItemsList">
+                <div id="carritoVacioMsg" class="text-center py-5 text-muted">
+                    <div class="mb-2">
+                        <i class="bi bi-cart-x fs-1 text-slate-400"></i>
+                    </div>
+                    <h6 class="fw-bold text-slate-600 mb-1">Ticket Vacío</h6>
+                    <p class="small text-muted mb-0">Seleccione productos del catálogo o use el lector de barras para comenzar.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Desglose de Bases e ITBIS en Tiempo Real -->
+        <div class="pos-fiscal-summary">
+            <div class="fiscal-row">
+                <span>Base 18%: <strong id="txtGravado18" class="font-tabular text-dark">RD$ 0.00</strong></span>
+                <span>ITBIS 18%: <strong id="txtItbis18" class="font-tabular text-dark">RD$ 0.00</strong></span>
+            </div>
+            <div class="fiscal-row">
+                <span>Base 16%: <strong id="txtGravado16" class="font-tabular text-dark">RD$ 0.00</strong></span>
+                <span>ITBIS 16%: <strong id="txtItbis16" class="font-tabular text-dark">RD$ 0.00</strong></span>
+            </div>
+            <div class="fiscal-row">
+                <span>Exento: <strong id="txtExento" class="font-tabular text-dark">RD$ 0.00</strong></span>
+                <span class="text-primary fw-bold">Total ITBIS: <strong id="txtTotalItbis" class="font-tabular">RD$ 0.00</strong></span>
+            </div>
+        </div>
+
+        <!-- Barra Inferior de Cobro con Display de Total -->
+        <div class="pos-checkout-bar">
+            <div class="total-due-display">
+                <div>
+                    <span class="small text-muted text-uppercase fw-bold d-block">Total a Cobrar</span>
+                    <span class="small text-muted">Moneda Oficial (DOP)</span>
+                </div>
+                <div class="total-due-amount font-tabular" id="txtTotalPagar">
+                    RD$ 0.00
+                </div>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-outline-secondary px-3" onclick="confirmarLimpiarCarrito()" title="Vaciar Carrito (Esc)">
+                    <i class="bi bi-trash3"></i>
+                </button>
+                <button type="button" class="btn-pay-giant flex-grow-1" id="btnCobrar" onclick="abrirModalCobro()" disabled>
+                    <i class="bi bi-cash-stack fs-5"></i>
+                    <span>COBRAR (F4)</span>
+                </button>
+            </div>
+        </div>
+    </section>
+
+</div>
+
+<!-- MODAL DE COBRO RÁPIDO Y EMISIÓN DGII -->
+<div class="modal fade" id="modalCobro" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4">
+            <div class="modal-header bg-slate-900 text-white py-3 px-4" style="background: #0f172a;">
+                <div class="d-flex align-items-center gap-2">
+                    <img src="~/images/logo-icon.svg" height="28" alt="Logo" />
+                    <h5 class="modal-title fw-bold mb-0 text-white">Cobro y Emisión de e-CF</h5>
+                </div>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <!-- Gran Display del Total -->
+                <div class="text-center p-3 rounded-3 mb-3" style="background-color: #f1f5f9; border: 1px solid #cbd5e1;">
+                    <span class="text-muted small text-uppercase fw-bold">Total Factura Fiscal</span>
+                    <div class="fs-1 fw-bold text-primary font-tabular mb-0" id="modalMontoTotal">RD$ 0.00</div>
+                </div>
+
+                <!-- Método de Pago -->
+                <div class="mb-3">
+                    <label class="form-label small fw-bold text-slate-700">Método de Pago DGII</label>
+                    <div class="btn-group w-100" role="group">
+                        <input type="radio" class="btn-check" name="metodoPagoRadio" id="mpEfectivo" value="1" checked onchange="cambiarMetodoPago(1)">
+                        <label class="btn btn-outline-primary fw-bold" for="mpEfectivo"><i class="bi bi-cash me-1"></i>Efectivo</label>
+
+                        <input type="radio" class="btn-check" name="metodoPagoRadio" id="mpTarjeta" value="3" onchange="cambiarMetodoPago(3)">
+                        <label class="btn btn-outline-primary fw-bold" for="mpTarjeta"><i class="bi bi-credit-card me-1"></i>Tarjeta</label>
+
+                        <input type="radio" class="btn-check" name="metodoPagoRadio" id="mpTransferencia" value="2" onchange="cambiarMetodoPago(2)">
+                        <label class="btn btn-outline-primary fw-bold" for="mpTransferencia"><i class="bi bi-bank me-1"></i>Transf.</label>
+
+                        <input type="radio" class="btn-check" name="metodoPagoRadio" id="mpMixto" value="99" onchange="cambiarMetodoPago(99)">
+                        <label class="btn btn-outline-primary fw-bold" for="mpMixto"><i class="bi bi-pie-chart me-1"></i>Mixto</label>
+                    </div>
+                </div>
+
+                <!-- Sección de Dinero Recibido y Cambio (Efectivo) -->
+                <div id="seccionEfectivo">
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold text-slate-700">Monto Recibido en Efectivo (RD$)</label>
+                        <input type="number" step="any" id="montoRecibidoInput" 
+                               class="form-control form-control-lg text-end fw-bold font-tabular" 
+                               placeholder="0.00" oninput="calcularCambio()" />
+                    </div>
+
+                    <!-- Billetes Rápidos Dominicanos -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-4"><button type="button" class="bill-btn w-100" onclick="agregarMontoRecibido(100)">+RD$ 100</button></div>
+                        <div class="col-4"><button type="button" class="bill-btn w-100" onclick="agregarMontoRecibido(200)">+RD$ 200</button></div>
+                        <div class="col-4"><button type="button" class="bill-btn w-100" onclick="agregarMontoRecibido(500)">+RD$ 500</button></div>
+                        <div class="col-4"><button type="button" class="bill-btn w-100" onclick="agregarMontoRecibido(1000)">+RD$ 1,000</button></div>
+                        <div class="col-4"><button type="button" class="bill-btn w-100" onclick="agregarMontoRecibido(2000)">+RD$ 2,000</button></div>
+                        <div class="col-4"><button type="button" class="bill-btn w-100 btn-primary text-white border-primary" onclick="montoExacto()">Exacto</button></div>
+                    </div>
+
+                    <!-- Cambio Calculado -->
+                    <div class="p-3 bg-emerald-subtle rounded-3 d-flex justify-content-between align-items-center mb-3" 
+                         style="background-color: #ecfdf5; border: 1px solid #a7f3d0;">
+                        <span class="fw-bold text-success">Cambio a Devolver:</span>
+                        <span class="fs-4 fw-bold font-tabular text-success" id="modalCambio">RD$ 0.00</span>
+                    </div>
+                </div>
+
+                <!-- Sección de Pagos Mixtos (Desglose Efectivo + Tarjeta) -->
+                <div id="seccionMixto" class="d-none">
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-slate-700">Efectivo (RD$)</label>
+                            <input type="number" step="any" id="montoMixtoEfectivo" 
+                                   class="form-control fw-bold font-tabular text-end" 
+                                   placeholder="0.00" oninput="calcularMixto()" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold text-slate-700">Tarjeta (RD$)</label>
+                            <input type="number" step="any" id="montoMixtoTarjeta" 
+                                   class="form-control fw-bold font-tabular text-end" 
+                                   placeholder="0.00" oninput="calcularMixto()" />
+                        </div>
+                    </div>
+                    <div class="p-2 rounded-3 bg-light border small d-flex justify-content-between align-items-center mb-3">
+                        <span class="text-muted fw-semibold">Total Cubierto:</span>
+                        <strong id="labelTotalCubierto" class="text-primary font-tabular">RD$ 0.00</strong>
+                    </div>
+                </div>
+
+                <div id="alertaErrorCobro" class="alert alert-danger small d-none" role="alert"></div>
+            </div>
+            <div class="modal-footer bg-light px-4 py-3">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar (Esc)</button>
+                <button type="button" class="btn btn-success fw-bold px-4 py-2 d-flex align-items-center gap-2" 
+                        id="btnConfirmarVenta" onclick="procesarVentaFinal()">
+                    <span class="spinner-border spinner-border-sm d-none" id="spinnerVenta"></span>
+                    <i class="bi bi-shield-check" id="iconoVenta"></i>
+                    <span>Firmar e-CF y Cobrar</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL DE ÉXITO Y TICKET FISCAL -->
+<div class="modal fade" id="modalExito" tabindex="-1" aria-hidden="true" data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg rounded-4 text-center p-4">
+            <div class="mb-3">
+                <div class="bg-success text-white rounded-circle d-inline-flex align-items-center justify-content-center shadow-sm" style="width: 68px; height: 68px;">
+                    <i class="bi bi-check-lg fs-1"></i>
+                </div>
+            </div>
+            <h4 class="fw-bold text-dark mb-1">¡Factura e-CF Emitida con Éxito!</h4>
+            <p class="text-muted small mb-3">Comprobante Fiscal Electrónico firmado y emitido</p>
+
+            <div id="exitoOfflineBanner" class="alert alert-warning py-2 px-3 small rounded-3 d-none mb-3 text-start">
+                <i class="bi bi-wifi-off me-1"></i>
+                <strong>Modo Resiliente / Offline:</strong> Factura registrada y emitida localmente. Se encoló para transmisión diferida automática a DGII. El ticket térmico es válido.
+            </div>
+
+            <div class="p-3 bg-light rounded-3 text-start mb-3 border font-tabular small">
+                <div class="d-flex justify-content-between mb-1">
+                    <span class="text-muted">e-NCF Asignado:</span>
+                    <strong class="text-primary fs-6" id="exitoEncf">-</strong>
+                </div>
+                <div class="d-flex justify-content-between mb-1">
+                    <span class="text-muted">Monto Total Facturado:</span>
+                    <strong id="exitoTotal">-</strong>
+                </div>
+                <div class="d-flex justify-content-between mb-1">
+                    <span class="text-muted">Cambio Devuelto:</span>
+                    <strong class="text-success" id="exitoCambio">-</strong>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span class="text-muted">TrackId DGII:</span>
+                    <span class="text-muted" id="exitoTrackId">-</span>
+                </div>
+            </div>
+
+            <div class="d-grid gap-2">
+                <button type="button" class="btn btn-dark fw-bold py-2 d-flex align-items-center justify-content-center gap-2 shadow-sm" id="btnImprimirTicket">
+                    <i class="bi bi-printer"></i>Imprimir Ticket Térmico 80mm
+                </button>
+                <button type="button" class="btn btn-outline-primary py-2 fw-semibold" data-bs-dismiss="modal" onclick="reiniciarVenta()">
+                    <i class="bi bi-plus-circle me-1"></i>Siguiente Venta (F2)
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+    // Estado en Memoria del Carrito
+    let carrito = [];
+    let modalCobroInstancia = null;
+    let modalExitoInstancia = null;
+    let tipoComprobanteActivo = 32;
+
+    // Buffer para lectores de código de barras láser (captura ráfagas rápidas de pulsaciones)
+    let barcodeBuffer = '';
+    let lastKeyTime = Date.now();
+
+    document.addEventListener("DOMContentLoaded", function () {
+        modalCobroInstancia = new bootstrap.Modal(document.getElementById('modalCobro'));
+        modalExitoInstancia = new bootstrap.Modal(document.getElementById('modalExito'));
+
+        const busquedaInput = document.getElementById('busquedaInput');
+        busquedaInput.addEventListener('input', filtrarProductos);
+
+        // Botón limpiar búsqueda
+        document.getElementById('btnBorrarBusqueda').addEventListener('click', function () {
+            busquedaInput.value = '';
+            filtrarProductos();
+            busquedaInput.focus();
+        });
+
+        // Filtros por Categoría de Impuesto
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', function () {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                filtrarProductos();
+            });
+        });
+
+        // Manejo de atajos globales y lector de código de barras
+        window.addEventListener('keydown', function (e) {
+            const currentTime = Date.now();
+
+            // Atajo F2: Buscar
+            if (e.key === 'F2') {
+                e.preventDefault();
+                busquedaInput.focus();
+                busquedaInput.select();
+                return;
+            }
+
+            // Atajo F4: Cobrar
+            if (e.key === 'F4') {
+                e.preventDefault();
+                if (carrito.length > 0) abrirModalCobro();
+                return;
+            }
+
+            // Atajo Esc: Cancelar o Limpiar
+            if (e.key === 'Escape') {
+                const modalCobroElem = document.getElementById('modalCobro');
+                const isModalOpen = modalCobroElem && modalCobroElem.classList.contains('show');
+                if (!isModalOpen && carrito.length > 0) {
+                    confirmarLimpiarCarrito();
+                }
+                return;
+            }
+
+            // Lector de código de barras: si el usuario no está escribiendo en inputs de texto
+            if (document.activeElement.tagName !== 'INPUT') {
+                if (currentTime - lastKeyTime > 120) {
+                    barcodeBuffer = '';
+                }
+                lastKeyTime = currentTime;
+
+                if (e.key === 'Enter') {
+                    if (barcodeBuffer.length >= 3) {
+                        e.preventDefault();
+                        procesarCodigoBarras(barcodeBuffer);
+                        barcodeBuffer = '';
+                    }
+                } else if (e.key.length === 1) {
+                    barcodeBuffer += e.key;
+                }
+            }
+        });
+    });
+
+    function procesarCodigoBarras(codigo) {
+        const codigoLimpio = codigo.trim().toLowerCase();
+        const items = document.querySelectorAll('.item-producto-col');
+        for (let el of items) {
+            if (el.getAttribute('data-codigo') === codigoLimpio) {
+                el.querySelector('.touch-product-card').click();
+                return;
+            }
+        }
+        // Si no se encuentra exactamente, ponerlo en el buscador
+        const busquedaInput = document.getElementById('busquedaInput');
+        busquedaInput.value = codigo;
+        filtrarProductos();
+    }
+
+    function cambiarTipoComprobante(tipo) {
+        tipoComprobanteActivo = tipo;
+        const alerta = document.getElementById('alertaE31');
+        const rncInput = document.getElementById('rncClienteInput');
+        const nombreInput = document.getElementById('nombreClienteInput');
+        const badge = document.getElementById('badgeTipoComp');
+
+        if (tipo === 31) {
+            badge.innerText = "e-CF 31 (Crédito Fiscal)";
+            badge.className = "badge bg-warning-subtle text-dark border border-warning-subtle font-tabular";
+            alerta.classList.remove('d-none');
+            rncInput.classList.add('border-warning');
+            if (nombreInput.value === "Consumidor Final") nombreInput.value = "";
+            rncInput.focus();
+        } else {
+            badge.innerText = "e-CF 32 (Consumo)";
+            badge.className = "badge bg-primary-subtle text-primary border border-primary-subtle font-tabular";
+            alerta.classList.add('d-none');
+            rncInput.classList.remove('border-warning');
+            if (!nombreInput.value) nombreInput.value = "Consumidor Final";
+        }
+    }
+
+    function filtrarProductos() {
+        const query = document.getElementById('busquedaInput').value.toLowerCase().trim();
+        const activeFilter = document.querySelector('.filter-btn.active').getAttribute('data-filter');
+
+        document.querySelectorAll('.item-producto-col').forEach(col => {
+            const filterTag = col.getAttribute('data-filter');
+            const codigo = col.getAttribute('data-codigo');
+            const desc = col.getAttribute('data-desc');
+
+            const coincideQuery = !query || codigo.includes(query) || desc.includes(query);
+            const coincideFiltro = activeFilter === 'all' || filterTag === activeFilter;
+
+            if (coincideQuery && coincideFiltro) {
+                col.style.display = '';
+            } else {
+                col.style.display = 'none';
+            }
+        });
+    }
+
+    const permitirVentaSinStock = @((enterprise?.PermitirVentaSinStock ?? false) ? "true" : "false");
+
+    function agregarAlCarrito(id, codigo, descripcion, precio, indicadorFacturacion, tasaITBIS, unidadMedida, unidadNombre, stockActual = 999999) {
+        if (!permitirVentaSinStock && stockActual <= 0) {
+            alert(`El producto "${descripcion}" no tiene existencias disponibles en inventario (Stock: 0).`);
+            return;
+        }
+
+        const itemExistente = carrito.find(x => x.productoId === id);
+        if (itemExistente) {
+            if (!permitirVentaSinStock && (itemExistente.cantidad + 1) > stockActual) {
+                alert(`Stock máximo alcanzado para "${descripcion}" (${stockActual} disponibles).`);
+                return;
+            }
+            itemExistente.cantidad += 1;
+        } else {
+            carrito.push({
+                productoId: id,
+                codigo: codigo,
+                descripcion: descripcion,
+                precioUnitario: precio,
+                cantidad: 1,
+                descuento: 0,
+                indicadorFacturacion: indicadorFacturacion,
+                tasaITBIS: tasaITBIS,
+                unidadMedida: unidadMedida,
+                unidadNombre: unidadNombre,
+                stockActual: stockActual
+            });
+        }
+        renderizarCarrito();
+    }
+
+    function cambiarCantidad(index, delta) {
+        if (carrito[index]) {
+            if (delta > 0 && !permitirVentaSinStock && (carrito[index].cantidad + delta) > carrito[index].stockActual) {
+                alert(`Stock máximo alcanzado para este producto (${carrito[index].stockActual} disponibles).`);
+                return;
+            }
+            carrito[index].cantidad += delta;
+            if (carrito[index].cantidad <= 0) {
+                carrito.splice(index, 1);
+            }
+            renderizarCarrito();
+        }
+    }
+
+    function actualizarCantidadDirecta(index, val) {
+        const cant = parseFloat(val);
+        if (carrito[index]) {
+            if (isNaN(cant) || cant <= 0) {
+                carrito.splice(index, 1);
+            } else {
+                if (!permitirVentaSinStock && cant > carrito[index].stockActual) {
+                    alert(`Stock insuficiente. Solo hay ${carrito[index].stockActual} disponibles.`);
+                    carrito[index].cantidad = carrito[index].stockActual;
+                } else {
+                    carrito[index].cantidad = cant;
+                }
+            }
+            renderizarCarrito();
+        }
+    }
+
+    function eliminarItem(index) {
+        carrito.splice(index, 1);
+        renderizarCarrito();
+    }
+
+    function confirmarLimpiarCarrito() {
+        if (confirm("¿Desea vaciar el ticket de venta actual?")) {
+            carrito = [];
+            renderizarCarrito();
+        }
+    }
+
+    function renderizarCarrito() {
+        const listCont = document.getElementById('ticketItemsList');
+        const btnCobrar = document.getElementById('btnCobrar');
+
+        if (carrito.length === 0) {
+            listCont.innerHTML = `
+                <div id="carritoVacioMsg" class="text-center py-5 text-muted">
+                    <div class="mb-2"><i class="bi bi-cart-x fs-1 text-slate-400"></i></div>
+                    <h6 class="fw-bold text-slate-600 mb-1">Ticket Vacío</h6>
+                    <p class="small text-muted mb-0">Seleccione productos del catálogo o use el lector de barras para comenzar.</p>
+                </div>`;
+            btnCobrar.disabled = true;
+            actualizarTotalesUI(0, 0, 0, 0, 0, 0, 0);
+            return;
+        }
+
+        btnCobrar.disabled = false;
+        let html = '';
+        let g18 = 0, i18 = 0, g16 = 0, i16 = 0, exento = 0;
+
+        carrito.forEach((item, index) => {
+            const subtotalLinea = (item.cantidad * item.precioUnitario) - item.descuento;
+            let itbisLinea = 0;
+            let taxBadge = 'badge-tax-0';
+            let taxLabel = '0%';
+
+            if (item.indicadorFacturacion === 1) { // 18%
+                g18 += subtotalLinea;
+                itbisLinea = subtotalLinea * 0.18;
+                i18 += itbisLinea;
+                taxBadge = 'badge-tax-18';
+                taxLabel = '18%';
+            } else if (item.indicadorFacturacion === 2) { // 16%
+                g16 += subtotalLinea;
+                itbisLinea = subtotalLinea * 0.16;
+                i16 += itbisLinea;
+                taxBadge = 'badge-tax-16';
+                taxLabel = '16%';
+            } else {
+                exento += subtotalLinea;
+            }
+
+            const totalLinea = subtotalLinea + itbisLinea;
+
+            html += `
+                <div class="ticket-row">
+                    <div style="flex: 1; min-width: 0;" class="pe-2">
+                        <div class="d-flex align-items-center gap-1">
+                            <span class="${taxBadge}" style="font-size: 0.65rem;">${taxLabel}</span>
+                            <span class="fw-bold text-truncate" style="font-size: 0.88rem;" title="${item.descripcion}">${item.descripcion}</span>
+                        </div>
+                        <div class="text-muted small font-tabular" style="font-size: 0.75rem;">
+                            ${item.unidadNombre} • RD$ ${item.precioUnitario.toFixed(2)} c/u
+                        </div>
+                    </div>
+                    
+                    <div class="d-flex align-items-center gap-1 me-2">
+                        <button type="button" class="qty-btn" onclick="cambiarCantidad(${index}, -1)" title="Reducir">-</button>
+                        <input type="text" class="form-control form-control-sm text-center font-tabular p-0" 
+                               style="width: 38px; height: 28px; font-weight: 700;" 
+                               value="${item.cantidad}" onchange="actualizarCantidadDirecta(${index}, this.value)">
+                        <button type="button" class="qty-btn" onclick="cambiarCantidad(${index}, 1)" title="Aumentar">+</button>
+                    </div>
+
+                    <div class="text-end font-tabular me-2" style="min-width: 75px;">
+                        <span class="fw-bold text-dark" style="font-size: 0.92rem;">RD$ ${totalLinea.toFixed(2)}</span>
+                    </div>
+
+                    <div>
+                        <button type="button" class="btn btn-link text-danger p-0" onclick="eliminarItem(${index})" title="Quitar item">
+                            <i class="bi bi-x-circle-fill"></i>
+                        </button>
+                    </div>
+                </div>`;
+        });
+
+        listCont.innerHTML = html;
+        const totalItbis = i18 + i16;
+        const totalPagar = g18 + i18 + g16 + i16 + exento;
+        actualizarTotalesUI(g18, i18, g16, i16, exento, totalItbis, totalPagar);
+    }
+
+    function actualizarTotalesUI(g18, i18, g16, i16, exento, totalItbis, totalPagar) {
+        document.getElementById('txtGravado18').innerText = `RD$ ${g18.toFixed(2)}`;
+        document.getElementById('txtItbis18').innerText = `RD$ ${i18.toFixed(2)}`;
+        document.getElementById('txtGravado16').innerText = `RD$ ${g16.toFixed(2)}`;
+        document.getElementById('txtItbis16').innerText = `RD$ ${i16.toFixed(2)}`;
+        document.getElementById('txtExento').innerText = `RD$ ${exento.toFixed(2)}`;
+        document.getElementById('txtTotalItbis').innerText = `RD$ ${totalItbis.toFixed(2)}`;
+        document.getElementById('txtTotalPagar').innerText = `RD$ ${totalPagar.toFixed(2)}`;
+        document.getElementById('modalMontoTotal').innerText = `RD$ ${totalPagar.toFixed(2)}`;
+    }
+
+    function calcularTotalActual() {
+        let g18 = 0, i18 = 0, g16 = 0, i16 = 0, exento = 0;
+        carrito.forEach(item => {
+            const subtotalLinea = (item.cantidad * item.precioUnitario) - item.descuento;
+            if (item.indicadorFacturacion === 1) {
+                g18 += subtotalLinea;
+                i18 += subtotalLinea * 0.18;
+            } else if (item.indicadorFacturacion === 2) {
+                g16 += subtotalLinea;
+                i16 += subtotalLinea * 0.16;
+            } else {
+                exento += subtotalLinea;
+            }
+        });
+        return Math.round((g18 + i18 + g16 + i16 + exento) * 100) / 100;
+    }
+
+    function abrirModalCobro() {
+        const rnc = document.getElementById('rncClienteInput').value.trim();
+
+        if (tipoComprobanteActivo === 31 && !rnc) {
+            alert("Para emitir Factura de Crédito Fiscal (e-CF 31), debe ingresar el RNC/Cédula del comprador ante la DGII.");
+            document.getElementById('rncClienteInput').focus();
+            return;
+        }
+
+        const total = calcularTotalActual();
+        document.getElementById('montoRecibidoInput').value = total.toFixed(2);
+        calcularCambio();
+        document.getElementById('alertaErrorCobro').classList.add('d-none');
+        modalCobroInstancia.show();
+
+        setTimeout(() => {
+            document.getElementById('montoRecibidoInput').focus();
+            document.getElementById('montoRecibidoInput').select();
+        }, 350);
+    }
+
+    function cambiarMetodoPago(metodo) {
+        const secEfectivo = document.getElementById('seccionEfectivo');
+        const secMixto = document.getElementById('seccionMixto');
+        if (metodo === 1) {
+            secEfectivo.style.display = '';
+            secMixto.classList.add('d-none');
+        } else if (metodo === 99) {
+            secEfectivo.style.display = 'none';
+            secMixto.classList.remove('d-none');
+            const total = calcularTotalActual();
+            const mitad = (total / 2).toFixed(2);
+            document.getElementById('montoMixtoEfectivo').value = mitad;
+            document.getElementById('montoMixtoTarjeta').value = (total - parseFloat(mitad)).toFixed(2);
+            calcularMixto();
+        } else {
+            secEfectivo.style.display = 'none';
+            secMixto.classList.add('d-none');
+        }
+    }
+
+    function calcularMixto() {
+        const ef = parseFloat(document.getElementById('montoMixtoEfectivo').value) || 0;
+        const tj = parseFloat(document.getElementById('montoMixtoTarjeta').value) || 0;
+        const cubierto = ef + tj;
+        const total = calcularTotalActual();
+        const lbl = document.getElementById('labelTotalCubierto');
+        lbl.innerText = `RD$ ${cubierto.toFixed(2)} de ${total.toFixed(2)}`;
+        lbl.className = cubierto >= total ? 'text-success font-tabular fw-bold' : 'text-danger font-tabular fw-bold';
+    }
+
+    function agregarMontoRecibido(val) {
+        const input = document.getElementById('montoRecibidoInput');
+        let current = parseFloat(input.value) || 0;
+        input.value = (current + val).toFixed(2);
+        calcularCambio();
+    }
+
+    function montoExacto() {
+        const total = calcularTotalActual();
+        document.getElementById('montoRecibidoInput').value = total.toFixed(2);
+        calcularCambio();
+    }
+
+    function calcularCambio() {
+        const total = calcularTotalActual();
+        const recibido = parseFloat(document.getElementById('montoRecibidoInput').value) || 0;
+        const cambio = Math.max(0, recibido - total);
+        document.getElementById('modalCambio').innerText = `RD$ ${cambio.toFixed(2)}`;
+    }
+
+    async function procesarVentaFinal() {
+        const total = calcularTotalActual();
+        const tipoComp = tipoComprobanteActivo;
+        const tipoPago = 1; // Contado
+        const metodoRadio = document.querySelector('input[name="metodoPagoRadio"]:checked');
+        const metodoPago = metodoRadio ? parseInt(metodoRadio.value) : 1;
+        const rnc = document.getElementById('rncClienteInput').value.trim();
+        const nombre = document.getElementById('nombreClienteInput').value.trim();
+        const recibido = parseFloat(document.getElementById('montoRecibidoInput').value) || total;
+
+        const alerta = document.getElementById('alertaErrorCobro');
+        alerta.classList.add('d-none');
+
+        let pagosArray = null;
+        let finalMetodoPago = metodoPago;
+
+        if (metodoPago === 99) {
+            const ef = parseFloat(document.getElementById('montoMixtoEfectivo').value) || 0;
+            const tj = parseFloat(document.getElementById('montoMixtoTarjeta').value) || 0;
+            if (ef + tj < total) {
+                alerta.innerText = "La suma de efectivo y tarjeta no cubre el total de la factura.";
+                alerta.classList.remove('d-none');
+                return;
+            }
+            pagosArray = [
+                { metodoPago: 1, monto: ef, referencia: "Efectivo POS" },
+                { metodoPago: 3, monto: tj, referencia: "Tarjeta POS" }
+            ];
+            finalMetodoPago = 1;
+        } else if (metodoPago === 1 && recibido < total) {
+            alerta.innerText = "El monto recibido en efectivo no puede ser menor al total a pagar.";
+            alerta.classList.remove('d-none');
+            return;
+        }
+
+        const btnConfirmar = document.getElementById('btnConfirmarVenta');
+        const spinner = document.getElementById('spinnerVenta');
+        const icono = document.getElementById('iconoVenta');
+        btnConfirmar.disabled = true;
+        spinner.classList.remove('d-none');
+        icono.classList.add('d-none');
+
+        const payload = {
+            tipoeCF: tipoComp,
+            tipoPago: tipoPago,
+            metodoPago: finalMetodoPago,
+            pagos: pagosArray,
+            rncComprador: rnc || null,
+            razonSocialComprador: nombre || (tipoComp === 32 ? "Consumidor Final" : null),
+            montoRecibido: metodoPago === 99 ? total : recibido,
+            items: carrito.map(item => ({
+                productoId: item.productoId,
+                descripcion: item.descripcion,
+                cantidad: item.cantidad,
+                precioUnitario: item.precioUnitario,
+                descuento: item.descuento,
+                indicadorFacturacion: item.indicadorFacturacion,
+                unidadMedida: item.unidadMedida
+            }))
+        };
+
+        try {
+            const resp = await fetch('@Url.Action("ProcesarVenta", "Pos")', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const result = await resp.json();
+
+            if (!resp.ok || !result.exitoso) {
+                throw new Error(result.mensaje || "Error al procesar la venta en la DGII.");
+            }
+
+            modalCobroInstancia.hide();
+
+            document.getElementById('exitoEncf').innerText = result.eNCF;
+            document.getElementById('exitoTotal').innerText = `RD$ ${result.total.toFixed(2)}`;
+            document.getElementById('exitoCambio').innerText = `RD$ ${result.cambio.toFixed(2)}`;
+            document.getElementById('exitoTrackId').innerText = result.trackId || "Asignado en Contingencia";
+
+            if (result.esOfflineDGII) {
+                document.getElementById('exitoOfflineBanner').classList.remove('d-none');
+            } else {
+                document.getElementById('exitoOfflineBanner').classList.add('d-none');
+            }
+
+            document.getElementById('btnImprimirTicket').onclick = function () {
+                if (result.electronicInvoiceId) {
+                    abrirVentanaTicket(result.electronicInvoiceId);
+                } else {
+                    alert("No se encontró el ID de la factura electrónica para imprimir.");
+                }
+            };
+
+            modalExitoInstancia.show();
+        } catch (err) {
+            alerta.innerText = err.message;
+            alerta.classList.remove('d-none');
+        } finally {
+            btnConfirmar.disabled = false;
+            spinner.classList.add('d-none');
+            icono.classList.remove('d-none');
+        }
+    }
+
+    function abrirVentanaTicket(id) {
+        const url = `@Url.Action("Ticket", "Pos")/${id}`;
+        window.open(url, '_blank', 'width=450,height=750,scrollbars=yes');
+    }
+
+    function reiniciarVenta() {
+        carrito = [];
+        renderizarCarrito();
+        document.getElementById('rncClienteInput').value = '';
+        document.getElementById('nombreClienteInput').value = 'Consumidor Final';
+        document.getElementById('busquedaInput').focus();
+    }
+</script>
+}

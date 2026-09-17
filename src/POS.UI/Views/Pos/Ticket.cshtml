@@ -1,0 +1,328 @@
+@model POS.Domain.Entities.ElectronicInvoice
+@using POS.Domain.Enums
+@using POS.Domain.Types
+
+@{
+    Layout = null;
+    var enterprise = ViewBag.Enterprise as POS.Domain.Entities.Enterprise;
+    var urlQr = ViewBag.UrlQr as string ?? "";
+    var tipoNombre = Model.TipoeCF == TipoeCFType.FacturaConsumo 
+        ? "FACTURA ELECTRÓNICA DE CONSUMO (e-CF 32)" 
+        : Model.TipoeCF == TipoeCFType.FacturaCreditoFiscal 
+            ? "FACTURA DE CRÉDITO FISCAL (e-CF 31)" 
+            : $"COMPROBANTE ELECTRÓNICO TIPO {(int)Model.TipoeCF}";
+}
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ticket e-CF @Model.eNCF - PosPalasy</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: 'Courier New', Courier, monospace, system-ui;
+            font-size: 12px;
+            color: #000;
+            background-color: #f1f5f9;
+            padding: 20px 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .actions-bar {
+            width: 100%;
+            max-width: 320px;
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .btn-action {
+            flex: 1;
+            padding: 8px 12px;
+            font-size: 13px;
+            font-weight: bold;
+            border-radius: 6px;
+            border: 1px solid #cbd5e1;
+            background: #fff;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .btn-action.primary {
+            background: #0d47a1;
+            color: #fff;
+            border-color: #0d47a1;
+        }
+        .ticket-wrapper {
+            width: @(enterprise?.AnchoPapelMm == 58 ? "58mm" : "80mm");
+            max-width: @(enterprise?.AnchoPapelMm == 58 ? "230px" : "320px");
+            background: #fff;
+            padding: @(enterprise?.AnchoPapelMm == 58 ? "10px 6px" : "16px 12px");
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            border-radius: 4px;
+            font-size: @(enterprise?.AnchoPapelMm == 58 ? "10px" : "12px");
+        }
+        .text-center { text-align: center; }
+        .text-end { text-align: right; }
+        .text-start { text-align: left; }
+        .fw-bold { font-weight: bold; }
+        .uppercase { text-transform: uppercase; }
+        .separator {
+            border-bottom: 1px dashed #000;
+            margin: 8px 0;
+        }
+        .separator-double {
+            border-bottom: 2px solid #000;
+            margin: 8px 0;
+        }
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: @(enterprise?.AnchoPapelMm == 58 ? "9.5px" : "11px");
+            margin: 6px 0;
+        }
+        .items-table th {
+            border-bottom: 1px dashed #000;
+            padding: 3px 0;
+            font-size: @(enterprise?.AnchoPapelMm == 58 ? "9px" : "10px");
+        }
+        .items-table td {
+            padding: 3px 0;
+            vertical-align: top;
+        }
+        .totals-table {
+            width: 100%;
+            font-size: @(enterprise?.AnchoPapelMm == 58 ? "9.5px" : "11px");
+        }
+        .totals-table td {
+            padding: 2px 0;
+        }
+        .qr-container {
+            margin: 10px auto;
+            text-align: center;
+        }
+        .qr-image {
+            width: @(enterprise?.AnchoPapelMm == 58 ? "110px" : "140px");
+            height: @(enterprise?.AnchoPapelMm == 58 ? "110px" : "140px");
+            display: inline-block;
+        }
+
+        @@media print {
+            body {
+                background: #fff;
+                padding: 0;
+                margin: 0;
+            }
+            .actions-bar {
+                display: none !important;
+            }
+            .ticket-wrapper {
+                width: @(enterprise?.AnchoPapelMm == 58 ? "58mm" : "80mm");
+                max-width: 100%;
+                box-shadow: none;
+                border-radius: 0;
+                padding: 4px 2px;
+                font-size: @(enterprise?.AnchoPapelMm == 58 ? "10px" : "12px");
+            }
+            @@page {
+                size: @(enterprise?.AnchoPapelMm == 58 ? "58mm" : "80mm") auto;
+                margin: 0mm;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Barra de Acciones en Pantalla (Oculta al imprimir) -->
+    <div class="actions-bar">
+        <button class="btn-action primary" onclick="window.print()">
+            <i class="bi bi-printer"></i> Imprimir
+        </button>
+        <button class="btn-action" onclick="window.close()">
+            <i class="bi bi-x-circle"></i> Cerrar
+        </button>
+    </div>
+
+    <!-- Ticket Térmico @(enterprise?.AnchoPapelMm ?? 80)mm -->
+    <div class="ticket-wrapper">
+        <!-- Encabezado de la Empresa -->
+        <div class="text-center">
+            @if (enterprise?.MostrarLogoTicket ?? true)
+            {
+                <div style="margin-bottom: 6px;">
+                    <img src="/images/logo-icon.svg" width="36" height="36" alt="PosPalasy" style="filter: grayscale(100%) contrast(150%);" />
+                </div>
+            }
+            <h3 class="fw-bold uppercase" style="font-size: @(enterprise?.AnchoPapelMm == 58 ? "12px" : "14px"); margin-bottom: 2px;">
+                @(enterprise?.NombreComercial ?? enterprise?.RazonSocial ?? "PosPalasy SRL")
+            </h3>
+            <div style="font-size: 11px;">@Model.RazonSocialEmisor</div>
+            <div class="fw-bold" style="font-size: 12px;">RNC: @Model.RNCEmisor</div>
+            <div style="font-size: 10px;">@(enterprise?.Direccion ?? "Santo Domingo, República Dominicana")</div>
+            <div style="font-size: 10px;">Tel: @(enterprise?.Telefono ?? "809-555-0199")</div>
+            @if (!string.IsNullOrWhiteSpace(enterprise?.MensajeEncabezadoExtra))
+            {
+                <div style="font-size: 9px; font-style: italic; margin-top: 3px;">@enterprise.MensajeEncabezadoExtra</div>
+            }
+        </div>
+
+        <div class="separator-double"></div>
+
+        <!-- Datos del e-CF -->
+        <div class="text-center">
+            <div class="fw-bold uppercase" style="font-size: 11px;">@tipoNombre</div>
+            <div class="fw-bold" style="font-size: 14px; letter-spacing: 0.5px; margin: 3px 0;">
+                e-NCF: @Model.eNCF
+            </div>
+            <div style="font-size: 10px;">Fecha Emisión: @Model.FechaEmision</div>
+        </div>
+
+        <div class="separator"></div>
+
+        <!-- Datos del Comprador -->
+        <div style="font-size: 11px;">
+            <div><span class="fw-bold">Cliente:</span> @(Model.RazonSocialComprador ?? "Consumidor Final")</div>
+            @if (!string.IsNullOrWhiteSpace(Model.RNCComprador))
+            {
+                <div><span class="fw-bold">RNC/Cédula:</span> @Model.RNCComprador</div>
+            }
+            <div><span class="fw-bold">Condición:</span> @Model.TipoPago.ToString().ToUpper()</div>
+        </div>
+
+        <div class="separator"></div>
+
+        <!-- Tabla de Productos -->
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th class="text-start">DESCRIPCIÓN</th>
+                    <th class="text-center" style="width: 35px;">CANT</th>
+                    <th class="text-end" style="width: 50px;">PRECIO</th>
+                    <th class="text-end" style="width: 55px;">TOTAL</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in Model.Items)
+                {
+                    var itbisLetra = item.IndicadorFacturacion == IndicadorFacturacionType.ITBIS1_18 ? "18%" :
+                                     item.IndicadorFacturacion == IndicadorFacturacionType.ITBIS2_16 ? "16%" : "E";
+                    <tr>
+                        <td colspan="4" class="fw-bold" style="padding-top: 4px;">
+                            @item.NombreItem
+                            <span style="font-size: 9px; font-weight: normal;">(@itbisLetra)</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td></td>
+                        <td class="text-center">@item.CantidadItem.ToString("0.##")</td>
+                        <td class="text-end">@item.PrecioUnitarioItem.ToString("N2")</td>
+                        <td class="text-end fw-bold">@item.MontoItem.ToString("N2")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <div class="separator"></div>
+
+        <!-- Totales e Impuestos -->
+        <table class="totals-table">
+            @if (Model.MontoGravadoI1 > 0)
+            {
+                <tr>
+                    <td>Subtotal Gravado 18%:</td>
+                    <td class="text-end">RD$ @Model.MontoGravadoI1.ToString("N2")</td>
+                </tr>
+                <tr>
+                    <td>ITBIS 18%:</td>
+                    <td class="text-end">RD$ @Model.TotalITBIS1.ToString("N2")</td>
+                </tr>
+            }
+            @if (Model.MontoGravadoI2 > 0)
+            {
+                <tr>
+                    <td>Subtotal Gravado 16%:</td>
+                    <td class="text-end">RD$ @Model.MontoGravadoI2.ToString("N2")</td>
+                </tr>
+                <tr>
+                    <td>ITBIS 16%:</td>
+                    <td class="text-end">RD$ @Model.TotalITBIS2.ToString("N2")</td>
+                </tr>
+            }
+            @if (Model.MontoExento > 0)
+            {
+                <tr>
+                    <td>Subtotal Exento:</td>
+                    <td class="text-end">RD$ @Model.MontoExento.ToString("N2")</td>
+                </tr>
+            }
+            <tr>
+                <td class="fw-bold">Total ITBIS:</td>
+                <td class="text-end fw-bold">RD$ @Model.TotalITBIS.ToString("N2")</td>
+            </tr>
+            <tr style="font-size: 14px;">
+                <td class="fw-bold" style="padding-top: 6px;">TOTAL A PAGAR:</td>
+                <td class="text-end fw-bold" style="padding-top: 6px;">RD$ @Model.MontoTotal.ToString("N2")</td>
+            </tr>
+        </table>
+
+        <div class="separator-double"></div>
+
+        <!-- Información de Seguridad DGII y QR -->
+        <div class="text-center" style="font-size: 10px;">
+            <div><span class="fw-bold">Código Seguridad e-CF:</span> <span class="fw-bold" style="font-size: 12px;">@Model.XMLHash</span></div>
+            @if (!string.IsNullOrEmpty(Model.TrackId))
+            {
+                <div><span>TrackId DGII:</span> @Model.TrackId</div>
+            }
+            <div style="font-size: 9px; color: #444; margin-top: 2px;">
+                Fecha Firma: @Model.FechaEnvio.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")
+            </div>
+
+            <!-- Código QR Oficial DGII -->
+            @if (!string.IsNullOrWhiteSpace(urlQr))
+            {
+                <div class="qr-container">
+                    <img class="qr-image" 
+                         src="https://api.qrserver.com/v1/create-qr-code/?size=140x140&margin=4&data=@Uri.EscapeDataString(urlQr)" 
+                         alt="QR DGII e-CF" />
+                </div>
+            }
+
+            <div style="font-size: 9px; line-height: 1.2; margin-top: 4px;">
+                Consulte la validez de este e-CF escaneando el código QR o en el portal oficial de la DGII.
+            </div>
+            <div class="separator"></div>
+            <div style="font-size: 8.5px; line-height: 1.2;">
+                Representación impresa de Comprobante Fiscal Electrónico conforme a la Ley No. 32-23 y Norma General No. 01-2020 DGII.
+            </div>
+            @if (!string.IsNullOrWhiteSpace(enterprise?.PoliticaGarantiaTicket))
+            {
+                <div class="separator"></div>
+                <div style="font-size: 8px; line-height: 1.2; text-align: justify;">
+                    <span class="fw-bold">Garantía y Devoluciones:</span> @enterprise.PoliticaGarantiaTicket
+                </div>
+            }
+            <div style="font-size: 10px; font-weight: bold; margin-top: 8px;">
+                @(enterprise?.MensajePieTicket ?? "¡GRACIAS POR SU COMPRA!")
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Auto imprimir si se abre en ventana modal
+        window.addEventListener('load', function() {
+            // Descomentar para auto-print si se desea:
+            // window.print();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,133 @@
+@model POS.Application.DTOs.ConfiguracionEmpresaDto
+@using POS.Domain.Types
+
+@{
+    ViewData["Title"] = "Configuración de la Empresa";
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <h3 class="fw-bold text-dark mb-0">Datos de la Empresa y Políticas de Venta</h3>
+            <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Identidad Fiscal DGII</span>
+        </div>
+        <p class="text-muted small mb-0">Información legal del contribuyente emisor para comprobantes e-CF y reglas del punto de venta</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="FacturaFisica" class="btn btn-outline-primary fw-semibold d-flex align-items-center gap-2 shadow-sm">
+            <i class="bi bi-printer"></i>Diseño de Factura Física
+        </a>
+        <a asp-action="Certificado" class="btn btn-outline-secondary fw-semibold d-flex align-items-center gap-2">
+            <i class="bi bi-shield-lock"></i>Certificado Digital
+        </a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm rounded-4 bg-white overflow-hidden">
+            <div class="card-header bg-white py-3 px-4 border-bottom">
+                <h6 class="fw-bold mb-0 text-slate-800"><i class="bi bi-building me-2 text-primary"></i>Ficha del Contribuyente</h6>
+            </div>
+            <div class="card-body p-4">
+                <form asp-action="GuardarEmpresa" method="post">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label fw-bold small text-slate-700">RNC del Emisor (DGII)</label>
+                            <input type="text" name="RNC" value="@Model.RNC" class="form-control font-monospace fw-bold" required maxlength="11" />
+                            <small class="text-muted">9 dígitos (Persona Física) u 11 (Jurídica)</small>
+                        </div>
+                        <div class="col-md-8">
+                            <label class="form-label fw-bold small text-slate-700">Razón Social (Legal ante DGII)</label>
+                            <input type="text" name="RazonSocial" value="@Model.RazonSocial" class="form-control fw-semibold" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-slate-700">Nombre Comercial (Nombre en Fachada/Ticket)</label>
+                            <input type="text" name="NombreComercial" value="@Model.NombreComercial" class="form-control" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-slate-700">Teléfono Principal / WhatsApp</label>
+                            <input type="text" name="Telefono" value="@Model.Telefono" class="form-control" placeholder="809-555-0199" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-slate-700">Correo Electrónico de Facturación</label>
+                            <input type="email" name="Email" value="@Model.Email" class="form-control" />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-slate-700">Sitio Web Oficial</label>
+                            <input type="url" name="SitioWeb" value="@Model.SitioWeb" class="form-control" placeholder="https://miempresa.com.do" />
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label fw-bold small text-slate-700">Dirección Física del Establecimiento</label>
+                            <input type="text" name="Direccion" value="@Model.Direccion" class="form-control" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-slate-700">Código Provincia DGII</label>
+                            <input type="text" name="CodigoProvincia" value="@Model.CodigoProvincia" class="form-control font-monospace" maxlength="2" />
+                            <small class="text-muted">Ej: 01 (Distrito Nacional), 02 (Santo Domingo)</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-slate-700">Código Municipio DGII</label>
+                            <input type="text" name="CodigoMunicipio" value="@Model.CodigoMunicipio" class="form-control font-monospace" maxlength="6" />
+                            <small class="text-muted">Ej: 010100 (Santo Domingo de Guzmán)</small>
+                        </div>
+
+                        <div class="col-12 pt-3 border-top">
+                            <h6 class="fw-bold text-slate-800 mb-3"><i class="bi bi-sliders me-2 text-primary"></i>Políticas Operativas del Punto de Venta</h6>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-slate-700">Comprobante Predeterminado en Caja</label>
+                            <select name="TipoComprobantePredeterminado" class="form-select">
+                                <option value="32" selected="@(Model.TipoComprobantePredeterminado == TipoeCFType.FacturaConsumo)">Consumo Final (e-CF 32)</option>
+                                <option value="31" selected="@(Model.TipoComprobantePredeterminado == TipoeCFType.FacturaCreditoFiscal)">Crédito Fiscal (e-CF 31)</option>
+                            </select>
+                            <small class="text-muted">Tipo de e-NCF preseleccionado al abrir la terminal</small>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold small text-slate-700">Control de Existencias en Caja</label>
+                            <div class="form-check form-switch p-2 bg-light rounded border">
+                                <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="switchStock" name="PermitirVentaSinStock" value="true" @(Model.PermitirVentaSinStock ? "checked" : "") />
+                                <label class="form-check-label small fw-semibold" for="switchStock">
+                                    Permitir ventas con stock en 0 o negativo
+                                </label>
+                            </div>
+                            <small class="text-muted">Desactívelo para bloquear ventas si no hay inventario físico.</small>
+                        </div>
+
+                        <div class="col-12 mt-4">
+                            <button type="submit" class="btn btn-primary fw-bold px-4 py-2 shadow-sm d-flex align-items-center gap-2">
+                                <i class="bi bi-check-circle"></i>Guardar Configuración
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card border-0 shadow-sm rounded-4 bg-white p-4 mb-4">
+            <h6 class="fw-bold text-slate-800 mb-3"><i class="bi bi-info-circle text-primary me-2"></i>Cumplimiento Ley 32-23</h6>
+            <p class="small text-muted mb-2">
+                Los datos de RNC y Razón Social ingresados deben coincidir exactamente con el Registro Nacional de Contribuyentes de la DGII.
+            </p>
+            <p class="small text-muted mb-0">
+                Estos datos se incorporarán automáticamente en el encabezado del XML-DSig y en los comprobantes fiscales de los clientes.
+            </p>
+        </div>
+
+        <div class="card border-0 shadow-sm rounded-4 bg-white p-4">
+            <h6 class="fw-bold text-slate-800 mb-3"><i class="bi bi-gear text-warning me-2"></i>Enlaces Rápidos</h6>
+            <div class="d-flex flex-column gap-2">
+                <a asp-action="FacturaFisica" class="btn btn-light border text-start p-2 rounded-3 small">
+                    <i class="bi bi-receipt text-primary me-2"></i>Configurar Ticket 80mm / 58mm
+                </a>
+                <a asp-action="Certificado" class="btn btn-light border text-start p-2 rounded-3 small">
+                    <i class="bi bi-shield-lock text-success me-2"></i>Inspeccionar Certificado .pfx
+                </a>
+            </div>
+        </div>
+    </div>
+</div>

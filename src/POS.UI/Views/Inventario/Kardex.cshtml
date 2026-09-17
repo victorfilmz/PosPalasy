@@ -1,0 +1,179 @@
+@model IEnumerable<POS.Application.DTOs.KardexItemDto>
+@using POS.Domain.Entities
+@using POS.Domain.Types
+
+@{
+    ViewData["Title"] = "Kardex y Auditoría de Movimientos";
+    var productos = ViewBag.Productos as List<POS.Domain.Entities.Producto> ?? new List<POS.Domain.Entities.Producto>();
+    var sucursales = ViewBag.Sucursales as List<POS.Domain.Entities.Sucursal> ?? new List<POS.Domain.Entities.Sucursal>();
+    var productoSeleccionadoId = ViewBag.ProductoSeleccionadoId as int?;
+    var sucursalSeleccionadaId = ViewBag.SucursalSeleccionadaId as int?;
+    var productoNombre = ViewBag.ProductoNombre as string;
+}
+
+<!-- Encabezado -->
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <a asp-action="Index" class="btn btn-sm btn-light border text-muted"><i class="bi bi-arrow-left"></i></a>
+            <h3 class="fw-bold text-dark mb-0">Kardex de Inventario Multi-Sucursal</h3>
+            <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Trazabilidad Total</span>
+        </div>
+        <p class="text-muted small mb-0 ps-4 ms-2">Registro inmutable de todas las entradas, ventas POS, mermas y ajustes de existencias por almacén</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="Index" class="btn btn-outline-secondary fw-semibold">
+            <i class="bi bi-box-seam me-1"></i>Catálogo de Productos
+        </a>
+    </div>
+</div>
+
+<!-- Filtros por Sucursal y Producto -->
+<div class="card border-0 shadow-sm rounded-4 bg-white p-3 mb-4">
+    <form method="get" asp-action="Kardex" class="row g-2 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label small fw-bold text-slate-700 mb-1">Sucursal / Almacén</label>
+            <select name="sucursalId" class="form-select bg-light fw-semibold" onchange="this.form.submit()">
+                <option value="">-- Todas las Sucursales (Global) --</option>
+                @foreach (var suc in sucursales)
+                {
+                    <option value="@suc.Id" selected="@(sucursalSeleccionadaId == suc.Id)">📍 @suc.Nombre</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-5">
+            <label class="form-label small fw-bold text-slate-700 mb-1">Filtrar por Producto</label>
+            <select name="productoId" class="form-select bg-light" onchange="this.form.submit()">
+                <option value="">-- Todos los Productos --</option>
+                @foreach (var prod in productos)
+                {
+                    <option value="@prod.Id" selected="@(productoSeleccionadoId == prod.Id)">@prod.Codigo - @prod.Descripcion</option>
+                }
+            </select>
+        </div>
+        <div class="col-md-3 d-flex gap-2">
+            <button type="submit" class="btn btn-primary w-100 fw-semibold">
+                <i class="bi bi-filter me-1"></i>Filtrar
+            </button>
+            @if (productoSeleccionadoId.HasValue || sucursalSeleccionadaId.HasValue)
+            {
+                <a asp-action="Kardex" class="btn btn-light border" title="Limpiar filtros">
+                    <i class="bi bi-x-lg"></i>
+                </a>
+            }
+        </div>
+    </form>
+</div>
+
+<!-- Tabla de Movimientos del Kardex -->
+<div class="card border-0 shadow-sm rounded-4 bg-white overflow-hidden">
+    <div class="card-header bg-white py-3 px-4 border-bottom d-flex justify-content-between align-items-center">
+        <h6 class="fw-bold mb-0 text-slate-800">
+            <i class="bi bi-clock-history me-2 text-primary"></i>
+            @(string.IsNullOrWhiteSpace(productoNombre) ? "Historial Cronológico de Movimientos" : $"Movimientos de '{productoNombre}'")
+        </h6>
+        <span class="badge bg-light text-muted border">@Model.Count() registros</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="bg-light text-slate-700">
+                <tr>
+                    <th class="ps-4">FECHA / HORA</th>
+                    <th>SUCURSAL / ALMACÉN</th>
+                    <th>PRODUCTO</th>
+                    <th>TIPO DE MOVIMIENTO</th>
+                    <th class="text-center">CANTIDAD</th>
+                    <th class="text-center">STOCK ANTERIOR</th>
+                    <th class="text-center">STOCK RESULTANTE</th>
+                    <th class="pe-4">CONCEPTO / TRAZABILIDAD</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (!Model.Any())
+                {
+                    <tr>
+                        <td colspan="8" class="text-center py-5 text-muted">
+                            <i class="bi bi-journal-x fs-1 d-block mb-2 text-slate-400"></i>
+                            No hay movimientos registrados en el Kardex para el filtro seleccionado.
+                        </td>
+                    </tr>
+                }
+                @foreach (var mov in Model)
+                {
+                    var isEntrada = mov.TipoMovimiento == TipoMovimientoInventario.EntradaCompra ||
+                                   mov.TipoMovimiento == TipoMovimientoInventario.DevolucionVenta ||
+                                   mov.TipoMovimiento == TipoMovimientoInventario.AjusteManual;
+
+                    var badgeColor = mov.TipoMovimiento switch
+                    {
+                        TipoMovimientoInventario.EntradaCompra => "bg-primary-subtle text-primary border border-primary-subtle",
+                        TipoMovimientoInventario.VentaPOS => "bg-indigo-subtle text-indigo border border-indigo-subtle",
+                        TipoMovimientoInventario.DevolucionVenta => "bg-success-subtle text-success border border-success-subtle",
+                        TipoMovimientoInventario.AjusteManual => "bg-info-subtle text-info border border-info-subtle",
+                        TipoMovimientoInventario.SalidaMerma => "bg-warning-subtle text-warning-emphasis border border-warning-subtle",
+                        TipoMovimientoInventario.SalidaVencimiento => "bg-danger-subtle text-danger border border-danger-subtle",
+                        _ => "bg-light text-dark border"
+                    };
+
+                    var tipoTexto = mov.TipoMovimiento switch
+                    {
+                        TipoMovimientoInventario.EntradaCompra => "Entrada por Compra",
+                        TipoMovimientoInventario.VentaPOS => "Salida por Venta POS",
+                        TipoMovimientoInventario.DevolucionVenta => "Devolución de Venta",
+                        TipoMovimientoInventario.AjusteManual => "Ajuste Manual / Conteo",
+                        TipoMovimientoInventario.SalidaMerma => "Merma / Dañado",
+                        TipoMovimientoInventario.SalidaVencimiento => "Caducidad / Vencido",
+                        _ => mov.TipoMovimiento.ToString()
+                    };
+
+                    <tr>
+                        <td class="ps-4 font-monospace small text-muted">
+                            @mov.Fecha.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")
+                        </td>
+                        <td>
+                            <span class="badge bg-light text-dark border fw-semibold">
+                                <i class="bi bi-geo-alt me-1 text-primary"></i>@(mov.NombreSucursal ?? "Casa Matriz")
+                            </span>
+                        </td>
+                        <td>
+                            <span class="font-monospace small fw-bold text-slate-800 d-block">@mov.CodigoProducto</span>
+                            <span class="fw-semibold text-dark">@mov.DescripcionProducto</span>
+                        </td>
+                        <td>
+                            <span class="badge @badgeColor">
+                                <i class="bi @(isEntrada ? "bi-arrow-down-left" : "bi-arrow-up-right") me-1"></i>
+                                @tipoTexto
+                            </span>
+                        </td>
+                        <td class="text-center font-monospace fw-bold @(isEntrada ? "text-success" : "text-danger")">
+                            @(isEntrada ? "+" : "-")@mov.Cantidad.ToString("0.##")
+                        </td>
+                        <td class="text-center font-monospace text-muted">
+                            @mov.StockAnterior.ToString("0.##")
+                        </td>
+                        <td class="text-center font-monospace fw-bold text-dark">
+                            @mov.StockResultante.ToString("0.##")
+                        </td>
+                        <td class="pe-4 small">
+                            <div class="text-slate-800 fw-semibold">@mov.Concepto</div>
+                            <div class="d-flex flex-wrap gap-1 mt-1">
+                                @if (!string.IsNullOrWhiteSpace(mov.ReferenciaDocumento))
+                                {
+                                    <span class="badge bg-light text-primary border font-monospace">@mov.ReferenciaDocumento</span>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(mov.NumeroLote))
+                                {
+                                    <span class="badge bg-secondary-subtle text-secondary border font-monospace">Lote: @mov.NumeroLote</span>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(mov.ProveedorNombre))
+                                {
+                                    <span class="badge bg-info-subtle text-info border"><i class="bi bi-truck me-1"></i>@mov.ProveedorNombre</span>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

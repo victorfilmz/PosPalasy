@@ -1,0 +1,131 @@
+@model POS.Application.DTOs.ResumenItbisMensualDto
+@using POS.Domain.Entities
+
+@{
+    ViewData["Title"] = "Resumen Mensual ITBIS (IT-1)";
+    var enterprise = ViewBag.Enterprise as Enterprise;
+    var mesNombre = new DateTime(Model.Anio, Model.Mes, 1).ToString("MMMM yyyy", new System.Globalization.CultureInfo("es-DO"));
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <h3 class="fw-bold text-dark mb-0">Resumen Fiscal de ITBIS (Formulario IT-1)</h3>
+            <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-tabular">DGII Oficial</span>
+        </div>
+        <p class="text-muted small mb-0">Consolidado mensual de bases imponibles gravadas y exentas para declaración jurada</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="Ventas607" asp-route-anio="@Model.Anio" asp-route-mes="@Model.Mes" class="btn btn-outline-primary fw-semibold d-flex align-items-center gap-2">
+            <i class="bi bi-table"></i>Ver Formato 607
+        </a>
+        <button type="button" class="btn btn-dark fw-bold d-flex align-items-center gap-2 shadow-sm" onclick="window.print()">
+            <i class="bi bi-printer"></i>Imprimir Resumen
+        </button>
+    </div>
+</div>
+
+<!-- Encabezado de la Declaración -->
+<div class="card border-0 shadow-sm rounded-4 mb-4 bg-white">
+    <div class="card-body p-4">
+        <div class="row align-items-center">
+            <div class="col-md-6">
+                <span class="text-muted small text-uppercase fw-bold">Contribuyente Emisor</span>
+                <h5 class="fw-bold mb-0 text-slate-800">@(enterprise?.RazonSocial ?? "PosPalasy SRL")</h5>
+                <span class="text-muted small font-tabular">RNC: @(enterprise?.RNC ?? "13100000001") • @(enterprise?.Direccion ?? "Santo Domingo, República Dominicana")</span>
+            </div>
+            <div class="col-md-6 text-md-end mt-3 mt-md-0">
+                <span class="text-muted small text-uppercase fw-bold">Período Fiscal Declarado</span>
+                <h4 class="fw-bold text-primary text-uppercase font-tabular mb-1">@mesNombre</h4>
+                <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle font-tabular">
+                    @Model.CantidadComprobantes comprobantes emitidos
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tarjetas de Totales Métricas -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="metric-card metric-card-primary">
+            <span class="text-muted small text-uppercase fw-bold d-block">Base Gravada al 18%</span>
+            <div class="fs-4 fw-bold text-dark font-tabular my-1">RD$ @Model.BaseGravada18.ToString("N2")</div>
+            <span class="text-primary fw-bold font-tabular small">ITBIS 18%: RD$ @Model.ITBIS18.ToString("N2")</span>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="metric-card metric-card-amber">
+            <span class="text-muted small text-uppercase fw-bold d-block">Base Gravada al 16%</span>
+            <div class="fs-4 fw-bold text-dark font-tabular my-1">RD$ @Model.BaseGravada16.ToString("N2")</div>
+            <span class="text-warning fw-bold font-tabular small">ITBIS 16%: RD$ @Model.ITBIS16.ToString("N2")</span>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="metric-card metric-card-emerald">
+            <span class="text-muted small text-uppercase fw-bold d-block">Operaciones Exentas</span>
+            <div class="fs-4 fw-bold text-dark font-tabular my-1">RD$ @Model.BaseExenta.ToString("N2")</div>
+            <span class="text-success fw-bold small">Tasa 0% / Exento según Ley</span>
+        </div>
+    </div>
+</div>
+
+<!-- Desglose Tipo Formulario Jurado IT-1 -->
+<div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white mb-4">
+    <div class="card-header bg-white py-3 px-4 border-bottom">
+        <h6 class="fw-bold mb-0 text-slate-800"><i class="bi bi-file-spreadsheet me-2 text-primary"></i>Esquema de Liquidación IT-1 (Casillas Oficiales DGII)</h6>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table-pos mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-4" style="width: 80px;">Casilla</th>
+                        <th>Concepto / Rubro Fiscal</th>
+                        <th class="text-end pe-4" style="width: 240px;">Monto Declarado (RD$)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="ps-4 font-monospace fw-bold text-muted">01</td>
+                        <td>Ingresos por Operaciones / Ventas Totales Netas</td>
+                        <td class="text-end pe-4 font-tabular fw-bold text-dark">RD$ @Model.TotalVentasNetas.ToString("N2")</td>
+                    </tr>
+                    <tr>
+                        <td class="ps-4 font-monospace fw-bold text-muted">02</td>
+                        <td>Ingresos por Operaciones Exentas de ITBIS</td>
+                        <td class="text-end pe-4 font-tabular">RD$ @Model.BaseExenta.ToString("N2")</td>
+                    </tr>
+                    <tr>
+                        <td class="ps-4 font-monospace fw-bold text-muted">03</td>
+                        <td>Operaciones Gravadas con la Tasa General (18%)</td>
+                        <td class="text-end pe-4 font-tabular">RD$ @Model.BaseGravada18.ToString("N2")</td>
+                    </tr>
+                    <tr>
+                        <td class="ps-4 font-monospace fw-bold text-muted">04</td>
+                        <td>Operaciones Gravadas con Tasa Reducida (16%)</td>
+                        <td class="text-end pe-4 font-tabular">RD$ @Model.BaseGravada16.ToString("N2")</td>
+                    </tr>
+                    <tr style="background-color: #f8fafc; border-top: 1px solid #e2e8f0;">
+                        <td class="ps-4 font-monospace fw-bold text-primary">10</td>
+                        <td class="fw-bold text-dark">Total ITBIS Cobrado / Devengado en el Período:</td>
+                        <td class="text-end pe-4 font-tabular fw-bold fs-5 text-primary">RD$ @Model.TotalITBISDevengado.ToString("N2")</td>
+                    </tr>
+                    @if (Model.TotalImpuestoAdicionalISC > 0)
+                    {
+                        <tr>
+                            <td class="ps-4 font-monospace fw-bold text-muted">11</td>
+                            <td>Impuesto Selectivo al Consumo (ISC Ad-Valorem / Específico)</td>
+                            <td class="text-end pe-4 font-tabular">RD$ @Model.TotalImpuestoAdicionalISC.ToString("N2")</td>
+                        </tr>
+                    }
+                    <tr style="background-color: #eff6ff; border-top: 2px solid #3b82f6;">
+                        <td class="ps-4 font-monospace fw-bold text-primary">12</td>
+                        <td class="fw-bold text-primary text-uppercase">Total General Facturado (Ventas + ITBIS + ISC):</td>
+                        <td class="text-end pe-4 font-tabular fw-bold fs-5 text-primary">RD$ @Model.TotalGeneralFacturado.ToString("N2")</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

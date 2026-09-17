@@ -1,0 +1,141 @@
+@model IEnumerable<POS.Domain.Entities.ElectronicInvoice>
+@using POS.Domain.Enums
+@using POS.Domain.Types
+
+@{
+    ViewData["Title"] = "Comprobantes Fiscales Electrónicos (e-CF)";
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <h3 class="fw-bold text-dark mb-0">Comprobantes Fiscales Electrónicos</h3>
+            <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-tabular">
+                @(Model?.Count() ?? 0) Comprobantes
+            </span>
+        </div>
+        <p class="text-muted small mb-0">Registro histórico de comprobantes e-CF autorizados y transmitidos a la DGII</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="Emitir" class="btn btn-primary fw-semibold d-flex align-items-center gap-2 shadow-sm">
+            <i class="bi bi-plus-circle"></i>Nueva Emisión e-CF
+        </a>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table-pos mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-4">e-NCF</th>
+                        <th>Tipo e-CF</th>
+                        <th>Fecha Emisión</th>
+                        <th>Comprador / RNC</th>
+                        <th class="text-end">Total (DOP)</th>
+                        <th>Estado DGII</th>
+                        <th>TrackId</th>
+                        <th class="text-end pe-4">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model == null || !Model.Any())
+                    {
+                        <tr>
+                            <td colspan="8" class="text-center py-5 text-muted">
+                                <i class="bi bi-inbox fs-1 d-block mb-2 text-secondary"></i>
+                                No se encontraron comprobantes fiscales registrados.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        foreach (var inv in Model)
+                        {
+                            <tr>
+                                <td class="ps-4">
+                                    <span class="fw-bold text-primary font-monospace" style="font-size: 0.95rem;">@inv.eNCF</span>
+                                </td>
+                                <td>
+                                    @if (inv.TipoeCF == TipoeCFType.FacturaCreditoFiscal)
+                                    {
+                                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle">e-CF 31</span>
+                                    }
+                                    else if (inv.TipoeCF == TipoeCFType.FacturaConsumo)
+                                    {
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle">e-CF 32</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-light text-dark border">Tipo @((int)inv.TipoeCF)</span>
+                                    }
+                                </td>
+                                <td class="text-muted small font-tabular">@inv.FechaEmision</td>
+                                <td>
+                                    <div class="fw-semibold text-dark text-truncate" style="max-width: 220px;">
+                                        @(string.IsNullOrWhiteSpace(inv.RazonSocialComprador) ? "Consumidor Final" : inv.RazonSocialComprador)
+                                    </div>
+                                    @if (!string.IsNullOrWhiteSpace(inv.RNCComprador))
+                                    {
+                                        <small class="text-muted font-monospace">RNC: @inv.RNCComprador</small>
+                                    }
+                                </td>
+                                <td class="text-end font-tabular fw-bold text-dark">RD$ @inv.MontoTotal.ToString("N2")</td>
+                                <td>
+                                    @switch (inv.Estado)
+                                    {
+                                        case EstadoFacturaElectronica.Aceptado:
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle">
+                                                <i class="bi bi-check2-circle me-1"></i>Aceptado DGII
+                                            </span>
+                                            break;
+                                        case EstadoFacturaElectronica.EnProceso:
+                                            <span class="badge bg-warning-subtle text-dark border border-warning-subtle">
+                                                <i class="bi bi-hourglass-split me-1"></i>En Proceso
+                                            </span>
+                                            break;
+                                        case EstadoFacturaElectronica.Rechazado:
+                                            <span class="badge bg-danger-subtle text-danger border border-danger-subtle">
+                                                <i class="bi bi-x-circle me-1"></i>Rechazado
+                                            </span>
+                                            break;
+                                        case EstadoFacturaElectronica.PendienteReenvio:
+                                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
+                                                <i class="bi bi-cloud-arrow-up me-1"></i>Contingencia
+                                            </span>
+                                            break;
+                                        default:
+                                            <span class="badge bg-light text-dark">@inv.Estado</span>
+                                            break;
+                                    }
+                                </td>
+                                <td>
+                                    @if (!string.IsNullOrEmpty(inv.TrackId))
+                                    {
+                                        <span class="font-monospace small text-muted">@inv.TrackId</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted small">-</span>
+                                    }
+                                </td>
+                                <td class="text-end pe-4">
+                                    <div class="d-inline-flex gap-1">
+                                        <a asp-controller="Pos" asp-action="Ticket" asp-route-id="@inv.Id" target="_blank" 
+                                           class="btn btn-sm btn-outline-secondary" title="Imprimir Ticket 80mm">
+                                            <i class="bi bi-printer"></i>
+                                        </a>
+                                        <a asp-action="Detalle" asp-route-id="@inv.Id" class="btn btn-sm btn-outline-primary fw-semibold">
+                                            <i class="bi bi-eye me-1"></i>Detalle
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>

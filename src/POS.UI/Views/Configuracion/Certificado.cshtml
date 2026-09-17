@@ -1,0 +1,163 @@
+@model POS.Application.DTOs.ConfiguracionCertificadoDto
+@using POS.Domain.Entities
+
+@{
+    ViewData["Title"] = "Configuración Certificado Digital y Ambiente DGII";
+    var enterprise = ViewBag.Enterprise as Enterprise;
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <h3 class="fw-bold text-dark mb-0">Certificado Digital y Conectividad DGII</h3>
+            <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Firma XML-DSig</span>
+        </div>
+        <p class="text-muted small mb-0">Firma electrónica de comprobantes y gestión de ambientes de homologación ante la DGII</p>
+    </div>
+    <div>
+        <form asp-action="ProbarConectividad" method="post" class="d-inline">
+            <button type="submit" class="btn btn-outline-primary fw-semibold d-flex align-items-center gap-2 shadow-sm">
+                <i class="bi bi-broadcast"></i>Probar Conectividad DGII
+            </button>
+        </form>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Estado del Certificado Actual -->
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm rounded-4 h-100 bg-white overflow-hidden">
+            <div class="card-header bg-white py-3 px-4 border-bottom d-flex justify-content-between align-items-center">
+                <h6 class="fw-bold mb-0 text-slate-800"><i class="bi bi-shield-lock me-2 text-primary"></i>Estado del Certificado Digital X.509</h6>
+                @if (Model.TieneCertificado && Model.EstaVigente)
+                {
+                    <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-1 font-tabular">
+                        <i class="bi bi-check-circle me-1"></i>Válido y Activo
+                    </span>
+                }
+                else if (Model.TieneCertificado && !Model.EstaVigente)
+                {
+                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-1 font-tabular">
+                        <i class="bi bi-exclamation-triangle me-1"></i>Certificado Expirado
+                    </span>
+                }
+                else
+                {
+                    <span class="badge bg-warning-subtle text-dark border border-warning-subtle px-3 py-1 font-tabular">
+                        <i class="bi bi-info-circle me-1"></i>Sin Certificado Físico
+                    </span>
+                }
+            </div>
+            <div class="card-body p-4">
+                @if (Model.TieneCertificado && string.IsNullOrEmpty(Model.ErrorCarga))
+                {
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label class="text-muted small d-block fw-bold">Titular / Sujeto del Certificado (CN / RNC)</label>
+                            <span class="fw-bold text-dark fs-6 font-monospace">@Model.Sujeto</span>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small d-block fw-bold">Entidad Emisora de Confianza</label>
+                            <span class="fw-bold text-dark">@Model.EmisorCertificado</span>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small d-block fw-bold">Número de Serie X.509</label>
+                            <span class="font-monospace text-muted small">@Model.NumeroSerie</span>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small d-block fw-bold">Vigencia Desde</label>
+                            <span class="font-tabular text-muted">@(Model.ValidoDesde?.ToString("dd/MM/yyyy HH:mm") ?? "-")</span>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="text-muted small d-block fw-bold">Vigencia Hasta</label>
+                            <span class="fw-bold font-tabular @(Model.DiasRestantes < 30 ? "text-danger" : "text-success")">
+                                @(Model.ValidoHasta?.ToString("dd/MM/yyyy HH:mm") ?? "-")
+                                <small class="d-block">(@Model.DiasRestantes días restantes)</small>
+                            </span>
+                        </div>
+                        <div class="col-12 pt-2 border-top">
+                            <label class="text-muted small d-block fw-bold">Huella Digital (Thumbprint SHA-1)</label>
+                            <code class="small text-dark font-monospace bg-light p-1 rounded border d-block text-truncate">@Model.HuellaDigitalSHA1</code>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center py-4">
+                        <div class="p-3 bg-light rounded-circle d-inline-flex mb-3 text-secondary">
+                            <i class="bi bi-file-earmark-lock fs-1"></i>
+                        </div>
+                        <h6 class="fw-bold text-slate-800">No se ha instalado un certificado digital .pfx</h6>
+                        <p class="text-muted small mb-0 px-md-4">
+                            Para firmar digitalmente los e-CF y transmitirlos a la DGII en producción o certificación, debe suministrar un certificado digital de persona física o jurídica emitido por una entidad autorizada en la República Dominicana (Avansi, Cámara de Comercio, etc.).
+                        </p>
+                        @if (!string.IsNullOrEmpty(Model.ErrorCarga))
+                        {
+                            <div class="alert alert-danger small mt-3 text-start">
+                                @Model.ErrorCarga
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Carga de Nuevo Certificado y Ambiente DGII -->
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden">
+            <div class="card-header bg-white py-3 px-4 border-bottom">
+                <h6 class="fw-bold mb-0 text-slate-800"><i class="bi bi-upload me-2 text-primary"></i>Instalar Certificado (.pfx / .p12)</h6>
+            </div>
+            <div class="card-body p-4">
+                <form asp-action="CargarCertificado" method="post" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-slate-700">Archivo del Certificado Digital</label>
+                        <input type="file" name="pfxFile" class="form-control" accept=".pfx,.p12" required />
+                        <small class="text-muted" style="font-size: 0.75rem;">Formato estándar PKCS#12 (.pfx, .p12)</small>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small text-slate-700">Contraseña de la Clave Privada</label>
+                        <input type="password" name="password" class="form-control" placeholder="Contraseña de protección .pfx" />
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-100 fw-bold py-2 shadow-sm">
+                        <i class="bi bi-shield-check me-1"></i>Validar e Instalar Certificado
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Selector de Ambiente DGII -->
+        <div class="card border-0 shadow-sm rounded-4 bg-white overflow-hidden">
+            <div class="card-header bg-white py-3 px-4 border-bottom">
+                <h6 class="fw-bold mb-0 text-slate-800"><i class="bi bi-hdd-network me-2 text-primary"></i>Ambiente de Facturación DGII</h6>
+            </div>
+            <div class="card-body p-4">
+                <div class="mb-3">
+                    <span class="text-muted small d-block">Endpoint DGII Activo:</span>
+                    <code class="fw-bold fs-6 text-dark font-monospace">@Model.BaseUrlDgii</code>
+                </div>
+
+                <form asp-action="CambiarAmbiente" method="post">
+                    <label class="form-label fw-bold small text-slate-700">Seleccionar Ambiente:</label>
+                    <div class="d-grid gap-2">
+                        <button type="submit" name="ambiente" value="TestECF" 
+                                class="btn @(Model.AmbienteActual == "TestECF" ? "btn-primary fw-bold" : "btn-outline-secondary") text-start d-flex justify-content-between align-items-center py-2 px-3">
+                            <span><i class="bi bi-bug me-2"></i>Certificación / Homologación (TestECF)</span>
+                            @if (Model.AmbienteActual == "TestECF") { <i class="bi bi-check2-circle fs-5"></i> }
+                        </button>
+
+                        <button type="submit" name="ambiente" value="Produccion" 
+                                class="btn @(Model.AmbienteActual == "Produccion" ? "btn-success fw-bold" : "btn-outline-secondary") text-start d-flex justify-content-between align-items-center py-2 px-3"
+                                onclick="return confirm('¿Confirma cambiar al ambiente oficial de PRODUCCIÓN de la DGII?')">
+                            <span><i class="bi bi-building-check me-2"></i>Producción Oficial (dfe.dgii.gov.do)</span>
+                            @if (Model.AmbienteActual == "Produccion") { <i class="bi bi-check2-circle fs-5"></i> }
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

@@ -1,0 +1,235 @@
+@model IEnumerable<POS.Domain.Entities.CajaTurno>
+@using POS.Domain.Entities
+@using POS.Domain.Enums
+
+@{
+    ViewData["Title"] = "Control de Caja y Turnos";
+    var turnoActivo = ViewBag.TurnoActivo as CajaTurno;
+    var enterprise = ViewBag.Enterprise as Enterprise;
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <h3 class="fw-bold text-dark mb-0">Control de Caja y Turnos</h3>
+            <span class="badge bg-primary-subtle text-primary border border-primary-subtle">Cortes Fiscales X & Z</span>
+        </div>
+        <p class="text-muted small mb-0">Gestión de turnos de cajeros, arqueo físico de efectivo y reportes de cierre</p>
+    </div>
+    <div class="d-flex gap-2">
+        @if (turnoActivo != null)
+        {
+            <a asp-action="CorteX" target="_blank" class="btn btn-outline-primary fw-semibold d-flex align-items-center gap-2">
+                <i class="bi bi-printer"></i>Imprimir Corte X
+            </a>
+            <button type="button" class="btn btn-outline-secondary fw-semibold d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#modalMovimiento">
+                <i class="bi bi-arrow-left-right"></i>Movimiento Efectivo
+            </button>
+            <a asp-action="Cierre" class="btn btn-danger fw-bold d-flex align-items-center gap-2 shadow-sm">
+                <i class="bi bi-lock-fill"></i>Cerrar Caja (Arqueo Z)
+            </a>
+        }
+        else
+        {
+            <a asp-action="Apertura" class="btn btn-success fw-bold d-flex align-items-center gap-2 shadow-sm px-4">
+                <i class="bi bi-unlock-fill"></i>Abrir Turno de Caja
+            </a>
+        }
+    </div>
+</div>
+
+@if (turnoActivo != null)
+{
+    <!-- Tarjeta de Turno Activo -->
+    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-white overflow-hidden">
+        <div class="card-header bg-white py-3 px-4 border-bottom d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-1 fw-bold">
+                    <span class="dgii-pulse d-inline-block me-1" style="width: 6px; height: 6px;"></span>
+                    TURNO ACTIVO #@turnoActivo.Id
+                </span>
+                <span class="fw-bold fs-6 text-slate-800">Cajero: @turnoActivo.Cajero</span>
+            </div>
+            <span class="text-muted small font-tabular">
+                <i class="bi bi-clock me-1 text-primary"></i>Apertura: @turnoActivo.FechaApertura.ToLocalTime().ToString("dd/MM/yyyy hh:mm tt")
+            </span>
+        </div>
+        <div class="card-body p-4">
+            <div class="row g-3">
+                <div class="col-sm-6 col-xl-3">
+                    <div class="metric-card metric-card-primary">
+                        <span class="text-muted small d-block text-uppercase fw-bold">Fondo Base Inicial</span>
+                        <div class="fs-4 fw-bold text-dark font-tabular my-1">RD$ @turnoActivo.MontoInicial.ToString("N2")</div>
+                        <small class="text-muted">Aporte de apertura</small>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                    <div class="metric-card metric-card-emerald">
+                        <span class="text-muted small d-block text-uppercase fw-bold">Ventas en Efectivo</span>
+                        <div class="fs-4 fw-bold text-success font-tabular my-1">RD$ @turnoActivo.VentasEfectivo.ToString("N2")</div>
+                        <small class="text-muted">Cobrado en caja</small>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                    <div class="metric-card metric-card-purple">
+                        <span class="text-muted small d-block text-uppercase fw-bold">Tarjeta / Transf.</span>
+                        <div class="fs-4 fw-bold text-primary font-tabular my-1">RD$ @((turnoActivo.VentasTarjeta + turnoActivo.VentasTransferencia).ToString("N2"))</div>
+                        <small class="text-muted">Ventas electrónicas</small>
+                    </div>
+                </div>
+                <div class="col-sm-6 col-xl-3">
+                    <div class="metric-card metric-card-amber" style="background-color: #fffbeb;">
+                        <span class="small d-block fw-bold text-uppercase text-warning">Efectivo Esperado</span>
+                        <div class="fs-4 fw-bold text-dark font-tabular my-1">RD$ @turnoActivo.EfectivoEsperado.ToString("N2")</div>
+                        <small class="text-muted">Base + Efectivo ± Mov.</small>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Desglose de Movimientos y Enlace a POS -->
+            <div class="row g-3 mt-2 align-items-center pt-3 border-top">
+                <div class="col-6 col-md-3">
+                    <small class="text-muted d-block">Facturas Emitidas:</small>
+                    <span class="fw-bold font-tabular text-dark">@turnoActivo.CantidadTransacciones facturas (RD$ @turnoActivo.TotalVentas.ToString("N2"))</span>
+                </div>
+                <div class="col-6 col-md-3">
+                    <small class="text-muted d-block">Entradas Extra (+):</small>
+                    <span class="fw-bold font-tabular text-success">+ RD$ @turnoActivo.TotalEntradasEfectivo.ToString("N2")</span>
+                </div>
+                <div class="col-6 col-md-3">
+                    <small class="text-muted d-block">Salidas / Retiros (-):</small>
+                    <span class="fw-bold font-tabular text-danger">- RD$ @turnoActivo.TotalSalidasEfectivo.ToString("N2")</span>
+                </div>
+                <div class="col-6 col-md-3 text-md-end">
+                    <a asp-controller="Pos" asp-action="Index" class="btn btn-sm btn-primary fw-bold px-3">
+                        <i class="bi bi-cart3 me-1"></i>Ir a Facturar en POS
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="alert alert-warning border-0 shadow-sm p-4 rounded-4 mb-4 d-flex flex-wrap justify-content-between align-items-center gap-3 bg-white">
+        <div class="d-flex align-items-center gap-3">
+            <div class="p-3 rounded-circle bg-warning-subtle text-warning">
+                <i class="bi bi-exclamation-octagon fs-2"></i>
+            </div>
+            <div>
+                <h5 class="fw-bold mb-1 text-slate-800">No hay ningún turno de caja abierto</h5>
+                <p class="mb-0 text-muted small">Para un control riguroso de arqueo y corte de ventas, inicie el turno antes de realizar operaciones en la terminal.</p>
+            </div>
+        </div>
+        <a asp-action="Apertura" class="btn btn-warning fw-bold px-4 py-2 shadow-sm">
+            <i class="bi bi-unlock me-1"></i>Abrir Turno Ahora
+        </a>
+    </div>
+}
+
+<!-- Historial de Turnos y Cuadres Anteriores -->
+<div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
+    <div class="card-header bg-white py-3 px-4 border-bottom">
+        <h6 class="fw-bold mb-0 text-slate-800"><i class="bi bi-clock-history me-2 text-primary"></i>Historial de Turnos y Cuadres Fiscales</h6>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table-pos mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-4">Turno #</th>
+                        <th>Cajero</th>
+                        <th>Apertura</th>
+                        <th>Cierre</th>
+                        <th class="text-end">Fondo Base</th>
+                        <th class="text-end">Total Ventas</th>
+                        <th class="text-end">Efectivo Físico</th>
+                        <th>Resultado Cuadre</th>
+                        <th class="text-end pe-4">Reporte</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model == null || !Model.Any())
+                    {
+                        <tr>
+                            <td colspan="9" class="text-center py-5 text-muted">
+                                <i class="bi bi-inbox fs-1 d-block mb-2 text-secondary"></i>
+                                No hay registros de turnos anteriores en el sistema.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        foreach (var turno in Model)
+                        {
+                            var diff = turno.Diferencia ?? 0;
+                            var badgeDiffClass = diff == 0 ? "bg-success-subtle text-success border border-success-subtle" :
+                                                diff > 0 ? "bg-info-subtle text-info border border-info-subtle" :
+                                                "bg-danger-subtle text-danger border border-danger-subtle";
+                            var diffLabel = diff == 0 ? "Cuadrado (0.00)" :
+                                            diff > 0 ? $"+RD$ {diff:N2} (Sobrante)" :
+                                            $"-RD$ {Math.Abs(diff):N2} (Faltante)";
+
+                            <tr>
+                                <td class="ps-4 fw-bold font-monospace text-primary">#@turno.Id</td>
+                                <td class="fw-semibold">@turno.Cajero</td>
+                                <td class="text-muted small font-tabular">@turno.FechaApertura.ToLocalTime().ToString("dd/MM/yy hh:mm tt")</td>
+                                <td class="text-muted small font-tabular">@(turno.FechaCierre?.ToLocalTime().ToString("dd/MM/yy hh:mm tt") ?? "-")</td>
+                                <td class="text-end font-tabular">RD$ @turno.MontoInicial.ToString("N2")</td>
+                                <td class="text-end font-tabular fw-bold text-dark">RD$ @turno.TotalVentas.ToString("N2")</td>
+                                <td class="text-end font-tabular">RD$ @(turno.MontoRealCierre?.ToString("N2") ?? "-")</td>
+                                <td>
+                                    <span class="badge @badgeDiffClass font-tabular">@diffLabel</span>
+                                </td>
+                                <td class="text-end pe-4">
+                                    <a asp-action="ReporteZ" asp-route-id="@turno.Id" target="_blank" class="btn btn-sm btn-outline-dark fw-semibold" title="Imprimir Reporte Z">
+                                        <i class="bi bi-receipt me-1"></i>Reporte Z
+                                    </a>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL REGISTRO DE MOVIMIENTO DE EFECTIVO -->
+@if (turnoActivo != null)
+{
+    <div class="modal fade" id="modalMovimiento" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form asp-action="Movimiento" method="post">
+                <input type="hidden" name="turnoId" value="@turnoActivo.Id" />
+                <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                    <div class="modal-header bg-slate-900 text-white py-3 px-4" style="background: #0f172a;">
+                        <h5 class="modal-title fw-bold text-white"><i class="bi bi-arrow-left-right me-2 text-primary"></i>Movimiento de Efectivo</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body p-4">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-slate-700">Tipo de Movimiento</label>
+                            <select name="tipo" class="form-select" required>
+                                <option value="1">Entrada de Efectivo (+) (Ej: Aporte adicional fondo de cambio)</option>
+                                <option value="2">Salida de Efectivo (-) (Ej: Retiro preventivo o pago de mensajería)</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-slate-700">Monto (RD$)</label>
+                            <input type="number" step="0.01" name="monto" class="form-control form-control-lg fw-bold text-end font-tabular" placeholder="0.00" required min="0.01" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-slate-700">Concepto o Justificación</label>
+                            <input type="text" name="concepto" class="form-control" placeholder="Ej: Recarga de cambio en monedas y billetes" required />
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light px-4 py-3">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary fw-bold px-4">Guardar Movimiento</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+}

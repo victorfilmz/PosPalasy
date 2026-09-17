@@ -1,0 +1,48 @@
+@{
+    ViewData["Title"] = "Apertura de Turno de Caja";
+}
+
+<div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+        <div class="card border-0 shadow-sm rounded-3">
+            <div class="card-header bg-success text-white py-3">
+                <h5 class="fw-bold mb-0"><i class="bi bi-unlock-fill me-2"></i>Apertura de Turno de Caja</h5>
+            </div>
+            <div class="card-body p-4">
+                <form asp-action="Apertura" method="post">
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">Nombre del Cajero / Operador</label>
+                        <div class="input-group">
+                            <span class="input-group-text bg-light"><i class="bi bi-person"></i></span>
+                            <input type="text" name="cajero" class="form-control" value="Cajero Principal" required />
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold small">Fondo Inicial de Caja (Cambio en RD$)</label>
+                        <div class="input-group input-group-lg">
+                            <span class="input-group-text bg-light fw-bold">RD$</span>
+                            <input type="number" step="0.01" name="montoInicial" id="montoInicialInput" class="form-control fw-bold text-end" value="2000.00" required min="0" />
+                        </div>
+                        <small class="text-muted">Monto físico asignado para dar cambio a clientes.</small>
+                    </div>
+
+                    <!-- Botones de selección rápida de fondo -->
+                    <div class="d-flex gap-2 mb-4">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('montoInicialInput').value='1000.00'">RD$ 1,000</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('montoInicialInput').value='2000.00'">RD$ 2,000</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('montoInicialInput').value='3000.00'">RD$ 3,000</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('montoInicialInput').value='5000.00'">RD$ 5,000</button>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-success fw-bold py-2 fs-5">
+                            <i class="bi bi-check2-circle me-1"></i>Confirmar y Abrir Turno
+                        </button>
+                        <a asp-action="Index" class="btn btn-light border">Cancelar</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
