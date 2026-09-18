@@ -70,10 +70,7 @@
                 </a>
                 @if (puedeSupervisar)
                 {
-                    <a asp-controller="Facturacion" asp-action="Emitir" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Facturacion" && ViewContext.RouteData.Values["action"]?.ToString() == "Emitir" ? "active" : "")" title="Emisión Manual">
-                        <i class="bi bi-file-earmark-plus"></i>
-                        <span class="link-text">Emisión Manual B01/B02</span>
-                    </a>
+                    @* FASE 3: la emisión manual fue retirada; el único registro de venta es el POS. *@
                     <a asp-controller="Facturacion" asp-action="Anulaciones" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Facturacion" && ViewContext.RouteData.Values["action"]?.ToString() == "Anulaciones" ? "active" : "")" title="Anulaciones ANECF">
                         <i class="bi bi-shield-slash"></i>
                         <span class="link-text">Anulaciones (ANECF)</span>

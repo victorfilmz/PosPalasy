@@ -261,7 +261,7 @@ public sealed class ProcesarVentaHandler
                 productoId,
                 turno.SucursalId,
                 linea.Cantidad,
-                empresa.PermitirVentaSinStock,
+                empresa.PoliticaStock != PoliticaStock.Bloquear,
                 token);
 
             if (!resultado.Aplicado)
@@ -275,6 +275,11 @@ public sealed class ProcesarVentaHandler
                     "STOCK_INSUFICIENTE");
             }
 
+            // Políticas Permitir y Advertir pueden vender por encima de la existencia: la venta debe
+            // quedar marcada para revisión, no escondido. La política la impone el servidor.
+            var sinExistenciaSuficiente = resultado.StockResultante < 0m
+                || !resultado.ExistenciaRegistrada;
+
             await _movimientoRepo.AddAsync(new MovimientoInventario
             {
                 ProductoId = productoId,
@@ -284,11 +289,17 @@ public sealed class ProcesarVentaHandler
                 StockAnterior = resultado.StockResultante + linea.Cantidad,
                 StockNuevo = resultado.StockResultante,
                 CostoUnitario = productos[productoId].CostoUnitario,
-                Concepto = $"Salida POS e-CF {eNCF}",
+                Concepto = sinExistenciaSuficiente && empresa.PoliticaStock == PoliticaStock.Advertir
+                    ? $"ADVERTENCIA de stock: salida POS e-CF {eNCF} (política {empresa.PoliticaStock})"
+                    : $"Salida POS e-CF {eNCF}",
                 ReferenciaDocumento = eNCF,
+                RequiereRevision = sinExistenciaSuficiente && empresa.PoliticaStock == PoliticaStock.Advertir,
                 Fecha = DateTime.UtcNow,
                 Usuario = command.UsuarioNombre
             }, token);
+
+            if (sinExistenciaSuficiente && empresa.PoliticaStock == PoliticaStock.Advertir)
+                venta.RequiereRevisionStock = true;
         }
     }
 

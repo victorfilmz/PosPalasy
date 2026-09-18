@@ -234,6 +234,9 @@ agotados) · `Definitivo` (error no recuperable).
 El terminal genera **una** `ClaveIdempotencia` por carrito y la reenvía en cada intento. El servidor la
 persiste en `Ventas.ClaveIdempotencia` con **índice único**: la base de datos es la barrera, no el código.
 
+> Nota (Fase 3): la sección de deuda mencionaba el §6 como pendiente de aclaración — esta es la política
+> vigente.
+
 ```mermaid
 flowchart LR
     P1[POST 1] --> U{¿existe clave?}
@@ -253,6 +256,12 @@ un solo movimiento de inventario y una sola transacción en la caja.
 Si la clave llega vacía, el controlador genera una nueva y **registra una advertencia**: sin ella no hay
 protección contra duplicados (compatibilidad con terminales antiguos, deuda declarada).
 
+**Política de la clave (Fase 3):** el navegador la genera **una vez por carrito** (al abrir el terminal
+se crea `claveVenta`) y la reutiliza en cada reintento de la misma venta; se renueva al terminar o
+cancelar la venta. El servidor **no rechaza** solicitudes sin clave (mantener operativos los terminales
+existentes) pero sí las marca en el log para su detección. Requerir la clave de forma obligatoria
+(opción A) se evaluará cuando exista integración por API, donde será requisito de contrato.
+
 ---
 
 ## 7. eNCF y concurrencia
@@ -270,9 +279,10 @@ protección contra duplicados (compatibilidad con terminales antiguos, deuda dec
 - Los saltos de numeración solo pueden producirse por ventas revertidas, que es exactamente el caso en
   el que el número **no** debe consumirse.
 
-> La prueba de concurrencia múltiple (`VentasSimultaneas_NoDuplicanNumeroDeComprobanteNiGeneranStockNegativo`)
-> corre sobre SQLite, que serializa escritores: comprueba la lógica de reintento y la unicidad, no el
-> comportamiento del motor bajo bloqueo real. La validación sobre SQL Server está pendiente (FASE 3).
+> La asignación se hace con bloqueo de fila en SQL Server (`UPDLOCK, ROWLOCK`, Fase 3): los emisores
+> esperan su turno en el punto fiscal en vez de competir; con SQLite (pruebas) se usa el camino
+> optimista y el índice único como barreras. Mediciones 1→100 concurrentes y la mezcla 31/32 en dos
+> sucursales están en `09_Concurrencia_eNCF.md`: 0 duplicados en todos los escenarios.
 
 ---
 
@@ -285,13 +295,13 @@ protección contra duplicados (compatibilidad con terminales antiguos, deuda dec
   `STOCK_INSUFICIENTE` → rollback.
 - Si el producto no tiene fila de existencia en la sucursal del turno, se trata como **no registrado**
   (no como "ilimitado") y el mensaje lo dice explícitamente.
-- **Política configurable por empresa:** `Enterprise.PermitirVentaSinStock`.
-  - `false` (estricto): no se vende por encima de lo disponible.
-  - `true` (permisivo): la venta se registra y la existencia queda **negativa**, con kardex que lo
-    documenta.
-  - ⚠️ **El valor por defecto del sistema es `true`** (`Enterprise` y el DDL `DEFAULT 1`). Está
-    verificado de extremo a extremo y es un hallazgo abierto: debe ser una decisión explícita del
-    negocio, no un efecto colateral (ver §11).
+- **Política configurable por empresa (Fase 3):** `Enterprise.PoliticaStock` con tres estados,
+  impuesta por el servidor dentro de la transacción (detalle en `08_Politica_Stock.md`):
+  - `Permitir` (defecto): la venta se registra y la existencia queda **negativa**, con kardex exacto.
+  - `Advertir`: la venta prosigue y queda **marcada** (`RequiereRevisionStock` en la venta,
+    `RequiereRevision` y concepto `ADVERTENCIA…` en el kardex) para revisión; una venta normal no se marca.
+  - `Bloquear`: rechazo antes de tocar inventario, caja, venta, eNCF u outbox.
+  El cambio de política queda auditado (usuario, fecha, valores, motivo).
 
 ---
 
@@ -374,6 +384,9 @@ nunca hay dos trabajadores sobre el mismo comprobante.
 4. **Concurrencia validada sobre SQLite**: falta la prueba de carga sobre SQL Server con bloqueo real. *(FASE 3)*
 5. **Sin migraciones EF Core**: el esquema se mantiene con DDL idempotente en `DbInitializer`. *(FASE 12)*
 6. **Terminales antiguos sin `ClaveIdempotencia`**: se advierte y se genera una clave nueva, sin protección
-   real contra reenvíos en ese caso.
+   real contra reenvíos en ese caso (política de clave en §6).
 7. Consulta de `FirstOrDefault` sin `OrderBy` en la resolución heredada de empresa/sucursal (aviso
    `EF.Query 10103`): no afecta la venta, pero debe fijarse el criterio.
+8. ~~Doble ruta de venta~~ **Resuelto en Fase 3**: la emisión libre de comprobantes
+   (`FacturacionController.Emitir`) fue retirada; `ProcesarVentaHandler` es el único camino de registro
+   y la numeración la asigna siempre `SecuenciaECFRepository`.

@@ -313,6 +313,34 @@ IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[Electron
 IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[ElectronicInvoices]') AND name = 'UltimoCodigoHttp')
     ALTER TABLE [ElectronicInvoices] ADD [UltimoCodigoHttp] int NULL;
 
+-- Política de stock de tres estados (Fase 3): columnas nuevas (los UPDATE de migración van en el
+-- lote siguiente: SQL Server compila el lote completo y no puede leer columnas creadas en él).
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[Enterprises]') AND name = 'PoliticaStock')
+    ALTER TABLE [Enterprises] ADD [PoliticaStock] int NOT NULL DEFAULT 0;
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[Ventas]') AND name = 'RequiereRevisionStock')
+    ALTER TABLE [Ventas] ADD [RequiereRevisionStock] bit NOT NULL DEFAULT 0;
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[MovimientosInventario]') AND name = 'RequiereRevision')
+    ALTER TABLE [MovimientosInventario] ADD [RequiereRevision] bit NOT NULL DEFAULT 0;
+
+-- Auditoría mínima de cambios de configuración (usuario, fecha, antes, después, motivo).
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'AuditoriaCambios')
+BEGIN
+    CREATE TABLE [AuditoriaCambios] (
+        [Id] int NOT NULL IDENTITY,
+        [Usuario] nvarchar(100) NOT NULL,
+        [FechaUtc] datetime2 NOT NULL DEFAULT (GETUTCDATE()),
+        [Entidad] nvarchar(100) NOT NULL,
+        [Campo] nvarchar(100) NOT NULL,
+        [ValorAnterior] nvarchar(200) NOT NULL,
+        [ValorNuevo] nvarchar(200) NOT NULL,
+        [Motivo] nvarchar(500) NULL,
+        [CreatedAt] datetime2 NOT NULL DEFAULT (GETUTCDATE()),
+        [UpdatedAt] datetime2 NULL,
+        CONSTRAINT [PK_AuditoriaCambios] PRIMARY KEY ([Id])
+    );
+    CREATE INDEX [IX_AuditoriaCambios_Entidad_Campo_Fecha] ON [AuditoriaCambios] ([Entidad], [Campo], [FechaUtc]);
+END
+
 -- Lease y espera progresiva de la cola DGII
 IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[EmisionesDGIIQueue]') AND name = 'Estado')
     ALTER TABLE [EmisionesDGIIQueue] ADD [Estado] int NOT NULL DEFAULT 0;
@@ -340,6 +368,12 @@ IF EXISTS (SELECT * FROM sys.tables WHERE name = 'SecuenciasECF')
     AND NOT EXISTS (SELECT 1 FROM [SecuenciasECF] WHERE [Serie] = 'E32')
     INSERT INTO [SecuenciasECF] ([Serie],[TipoECF],[Ultimo],[DesdeAutorizado],[HastaAutorizado],[Version],[FechaActualizacion])
     VALUES ('E32', 32, 0, 1, NULL, NEWID(), GETUTCDATE());
+
+-- Política de stock (Fase 3): migración del booleano anterior a la política, en un lote posterior
+-- a la creación de la columna. PermitirVentaSinStock true -> Permitir (0); false -> Bloquear (2).
+IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[Enterprises]') AND name = 'PoliticaStock')
+    AND EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[Enterprises]') AND name = 'PermitirVentaSinStock')
+    UPDATE [Enterprises] SET [PoliticaStock] = CASE WHEN [PermitirVentaSinStock] = 1 THEN 0 ELSE 2 END;
 
 -- Ventas existentes: clave de idempotencia única y obligatoria.
 IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[Ventas]') AND name = 'ClaveIdempotencia')

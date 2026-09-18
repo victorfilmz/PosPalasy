@@ -49,6 +49,12 @@ public class Venta : BaseEntity
 
     public string? Notas { get; set; }
 
+    /// <summary>
+    /// La venta se cobró bajo la política ADVERTIR sin existencia suficiente. Queda en la venta y en
+    /// el kardex para revisión; no cambia el importe ni el contenido fiscal del comprobante.
+    /// </summary>
+    public bool RequiereRevisionStock { get; set; }
+
     /// <summary>Efectivo recibido del cliente (bruto), para el ticket.</summary>
     public decimal MontoRecibido { get; set; }
 

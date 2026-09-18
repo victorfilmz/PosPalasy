@@ -8,6 +8,8 @@
 > 📁 [05_Plan_Implementacion.md](05_Plan_Implementacion.md) — Plan de implementación paso a paso
 > 📁 [06_Seguridad_Matriz_Permisos.md](06_Seguridad_Matriz_Permisos.md) — **Seguridad: roles, matriz de permisos y controles aplicados**
 > 📁 [07_Flujo_Venta_Transaccional.md](07_Flujo_Venta_Transaccional.md) — **Venta: caso de uso, transacción, estados, idempotencia, eNCF, inventario y caja**
+> 📁 [08_Politica_Stock.md](08_Politica_Stock.md) — **Política de existencias (Permitir/Advertir/Bloquear) y auditoría del cambio**
+> 📁 [09_Concurrencia_eNCF.md](09_Concurrencia_eNCF.md) — **Numeración fiscal bajo concurrencia: medición y solución**
 > 📁 [README.md](README.md) — Documentación principal y guía de inicio
 >
 > ---

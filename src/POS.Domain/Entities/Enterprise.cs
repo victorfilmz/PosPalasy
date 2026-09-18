@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using POS.Domain.Common;
+using POS.Domain.Enums;
 using POS.Domain.Types;
 
 namespace POS.Domain.Entities;
@@ -30,7 +31,12 @@ public class Enterprise : BaseEntity
     public int CantidadCopiasTicket { get; set; } = 1;
 
     // Políticas Operativas de Venta
-    public bool PermitirVentaSinStock { get; set; } = true;
+
+    /// <summary>
+    /// Política operativa de existencias impuesta por el servidor en cada venta
+    /// (Permitir / Advertir / Bloquear). Reemplaza al booleano PermitirVentaSinStock.
+    /// </summary>
+    public PoliticaStock PoliticaStock { get; set; } = PoliticaStock.Permitir;
 
     // Navegación
     public ICollection<Sucursal> Sucursales { get; set; } = new List<Sucursal>();

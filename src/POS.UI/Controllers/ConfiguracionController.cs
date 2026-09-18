@@ -9,6 +9,8 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using POS.Application.DTOs;
+using POS.Domain.Entities;
+using POS.Domain.Enums;
 using POS.Domain.Repositories;
 using POS.Infrastructure.DGII;
 using POS.UI.Security;
@@ -26,17 +28,20 @@ public class ConfiguracionController : Controller
     private readonly IConfiguration _configuration;
     private readonly DgiiConfig _dgiiConfig;
     private readonly IEnterpriseRepository _enterpriseRepo;
+    private readonly IAuditoriaRepository _auditoriaRepo;
     private readonly HttpClient _httpClient;
 
     public ConfiguracionController(
         IConfiguration configuration,
         DgiiConfig dgiiConfig,
         IEnterpriseRepository enterpriseRepo,
+        IAuditoriaRepository auditoriaRepo,
         HttpClient httpClient)
     {
         _configuration = configuration;
         _dgiiConfig = dgiiConfig;
         _enterpriseRepo = enterpriseRepo;
+        _auditoriaRepo = auditoriaRepo;
         _httpClient = httpClient;
     }
 
@@ -196,7 +201,7 @@ public class ConfiguracionController : Controller
             CodigoProvincia = enterprise.CodigoProvincia,
             CodigoMunicipio = enterprise.CodigoMunicipio,
             TipoComprobantePredeterminado = enterprise.TipoComprobantePredeterminado,
-            PermitirVentaSinStock = enterprise.PermitirVentaSinStock
+            PoliticaStock = enterprise.PoliticaStock
         };
 
         ViewBag.Enterprise = enterprise;
@@ -225,10 +230,25 @@ public class ConfiguracionController : Controller
             enterprise.CodigoProvincia = model.CodigoProvincia ?? "01";
             enterprise.CodigoMunicipio = model.CodigoMunicipio ?? "010100";
             enterprise.TipoComprobantePredeterminado = model.TipoComprobantePredeterminado;
-            enterprise.PermitirVentaSinStock = model.PermitirVentaSinStock;
+
+            // La política de existencias no es un campo más: su cambio queda auditado.
+            if (enterprise.PoliticaStock != model.PoliticaStock)
+            {
+                await _auditoriaRepo.RegistrarAsync(new AuditoriaCambio
+                {
+                    Usuario = SesionUsuario.ObtenerNombre(User),
+                    Entidad = nameof(Enterprise),
+                    Campo = nameof(Enterprise.PoliticaStock),
+                    ValorAnterior = enterprise.PoliticaStock.ToString(),
+                    ValorNuevo = model.PoliticaStock.ToString(),
+                    Motivo = model.MotivoCambioPoliticaStock
+                });
+
+                enterprise.PoliticaStock = model.PoliticaStock;
+            }
 
             await _enterpriseRepo.UpdateAsync(enterprise);
-            TempData["Mensaje"] = "Datos de la empresa y políticas de venta actualizados exitosamente.";
+            TempData["Mensaje"] = $"Datos de la empresa y política de stock ({model.PoliticaStock}) actualizados exitosamente.";
         }
 
         return RedirectToAction(nameof(Empresa));

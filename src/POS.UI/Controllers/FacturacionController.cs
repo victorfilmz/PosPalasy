@@ -24,20 +24,17 @@ public class FacturacionController : Controller
     private readonly IEnterpriseRepository _enterpriseRepo;
     private readonly IAnulacionRepository _anulacionRepo;
     private readonly IElectronicInvoiceService _invoiceService;
-    private readonly ITaxCalculator _taxCalculator;
 
     public FacturacionController(
         IInvoiceRepository invoiceRepo,
         IEnterpriseRepository enterpriseRepo,
         IAnulacionRepository anulacionRepo,
-        IElectronicInvoiceService invoiceService,
-        ITaxCalculator taxCalculator)
+        IElectronicInvoiceService invoiceService)
     {
         _invoiceRepo = invoiceRepo;
         _enterpriseRepo = enterpriseRepo;
         _anulacionRepo = anulacionRepo;
         _invoiceService = invoiceService;
-        _taxCalculator = taxCalculator;
     }
 
     public async Task<IActionResult> Lista(EstadoFacturaElectronica? estado = null)
@@ -57,68 +54,13 @@ public class FacturacionController : Controller
         return View(invoices);
     }
 
-    [HttpGet]
-    [Authorize(Policy = Politicas.Supervision)]
-    public async Task<IActionResult> Emitir()
-    {
-        var enterprise = await _enterpriseRepo.GetDefaultAsync();
-        var model = new ElectronicInvoiceRequest
-        {
-            TipoeCF = TipoeCFType.FacturaConsumo,
-            eNCF = "E320000000001",
-            Emisor = new EmisorRequest
-            {
-                RNC = enterprise?.RNC ?? "13100000001",
-                RazonSocial = enterprise?.RazonSocial ?? "PosPalasy SRL",
-                NombreComercial = enterprise?.NombreComercial,
-                Direccion = enterprise?.Direccion ?? "Av. 27 de Febrero",
-                Telefono = enterprise?.Telefono ?? "809-555-0199",
-                Email = enterprise?.Email ?? "facturacion@pospalasy.com.do"
-            },
-            Comprador = new CompradorRequest
-            {
-                RazonSocial = "Consumidor Final"
-            },
-            Items = new List<InvoiceItemRequest>
-            {
-                new()
-                {
-                    Indice = 1,
-                    Descripcion = "Producto Ejemplo POS",
-                    Cantidad = 1,
-                    PrecioUnitario = 100m,
-                    IndicadorFacturacion = IndicadorFacturacionType.ITBIS1_18,
-                    UnidadMedida = UnidadMedidaType.Unidad
-                }
-            }
-        };
-
-        model.Totales = _taxCalculator.CalcularTotales(model.Items);
-        return View(model);
-    }
-
-    [HttpPost]
-    [Authorize(Policy = Politicas.Supervision)]
-    public async Task<IActionResult> Emitir(ElectronicInvoiceRequest request)
-    {
-        request.Totales = _taxCalculator.CalcularTotales(request.Items);
-
-        var command = new EmitirFacturaCommand
-        {
-            Request = request
-        };
-
-        var response = await _invoiceService.EmitirAsync(command);
-
-        if (response.Exitoso)
-        {
-            TempData["Mensaje"] = $"Factura emitida con éxito. eNCF: {response.eNCF}. TrackId: {response.TrackId}";
-            return RedirectToAction(nameof(Lista));
-        }
-
-        ModelState.AddModelError("", response.Mensaje ?? "Ocurrió un error al emitir la factura electrónica.");
-        return View(request);
-    }
+    // ------------------------------------------------------------------
+    // FASE 3: la emisión libre de comprobantes (GET/POST Emitir) fue retirada.
+    // Permitía escribir el eNCF a mano y emitir sin venta, sin caja, sin kardex y sin idempotencia:
+    // una segunda ruta fiscal que eludía el control de integridad del POS.
+    // El único camino de registro es ProcesarVentaHandler; la numeración la asigna SecuenciaECF.
+    // Historial disponible en el commit bc1ecf7 y anteriores.
+    // ------------------------------------------------------------------
 
     public async Task<IActionResult> Detalle(int id)
     {

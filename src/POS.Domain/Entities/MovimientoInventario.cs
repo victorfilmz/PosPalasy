@@ -36,6 +36,12 @@ public class MovimientoInventario : BaseEntity
     public decimal CostoUnitario { get; set; }
     public string Concepto { get; set; } = string.Empty;
     public string? ReferenciaDocumento { get; set; } // Ej: e-NCF "E320000000002"
+
+    /// <summary>
+    /// Marca del kardex: la venta salió bajo la política ADVERTIR sin existencia suficiente.
+    /// Permite filtrar y revisar estas salidas sin confundirlas con ventas normales.
+    /// </summary>
+    public bool RequiereRevision { get; set; }
     public DateTime Fecha { get; set; } = DateTime.UtcNow;
     public string? Usuario { get; set; }
 }

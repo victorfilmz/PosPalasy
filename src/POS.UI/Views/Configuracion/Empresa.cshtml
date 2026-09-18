@@ -1,4 +1,5 @@
 @model POS.Application.DTOs.ConfiguracionEmpresaDto
+@using POS.Domain.Enums
 @using POS.Domain.Types
 
 @{
@@ -86,14 +87,14 @@
                         </div>
 
                         <div class="col-md-6">
-                            <label class="form-label fw-bold small text-slate-700">Control de Existencias en Caja</label>
-                            <div class="form-check form-switch p-2 bg-light rounded border">
-                                <input class="form-check-input ms-0 me-2" type="checkbox" role="switch" id="switchStock" name="PermitirVentaSinStock" value="true" @(Model.PermitirVentaSinStock ? "checked" : "") />
-                                <label class="form-check-label small fw-semibold" for="switchStock">
-                                    Permitir ventas con stock en 0 o negativo
-                                </label>
-                            </div>
-                            <small class="text-muted">Desactívelo para bloquear ventas si no hay inventario físico.</small>
+                            <label class="form-label fw-bold small text-slate-700">Política de Existencias en Caja</label>
+                            <select name="PoliticaStock" class="form-select" asp-for="PoliticaStock" asp-items="Html.GetEnumSelectList<PoliticaStock>()"></select>
+                            <small class="text-muted">
+                                Permitir: vende aunque no alcance (stock negativo explícito) · Advertir: vende y marca la venta para revisión ·
+                                Bloquear: rechaza la venta sin tocar inventario, caja ni numeración. El servidor impone esta política;
+                                cada cambio queda auditado con usuario, fecha y valores.
+                            </small>
+                            <input type="text" name="MotivoCambioPoliticaStock" class="form-control form-control-sm mt-2" placeholder="Motivo del cambio (opcional, queda en la auditoría)" maxlength="500" />
                         </div>
 
                         <div class="col-12 mt-4">

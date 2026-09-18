@@ -455,7 +455,9 @@ public class VentaEndToEndTests : IClassFixture<PosAppFactory>
         await using var contexto = CrearContexto();
 
         var empresa = await contexto.Enterprises.FirstAsync();
-        empresa.PermitirVentaSinStock = permitirVentaSinStock;
+        empresa.PoliticaStock = permitirVentaSinStock
+            ? PoliticaStock.Permitir
+            : PoliticaStock.Bloquear;
 
         await contexto.SaveChangesAsync();
     }

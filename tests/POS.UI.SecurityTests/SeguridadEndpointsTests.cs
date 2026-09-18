@@ -256,7 +256,6 @@ public class SeguridadEndpointsTests : IClassFixture<PosAppFactory>
     [InlineData("/Configuracion/CargarCertificado")]
     [InlineData("/Configuracion/CambiarAmbiente")]
     [InlineData("/Configuracion/ProbarConectividad")]
-    [InlineData("/Facturacion/Emitir")]
     [InlineData("/Facturacion/ConsultarEstado")]
     [InlineData("/Facturacion/Reenviar")]
     [InlineData("/Facturacion/Anular")]

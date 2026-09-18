@@ -1,5 +1,6 @@
 using System;
 using POS.Domain.Entities;
+using POS.Domain.Enums;
 using POS.Domain.Types;
 using Xunit;
 
@@ -82,7 +83,7 @@ public class InventarioDomainTests
 
         Assert.Equal(80, ent.AnchoPapelMm);
         Assert.True(ent.MostrarLogoTicket);
-        Assert.True(ent.PermitirVentaSinStock);
+        Assert.Equal(PoliticaStock.Permitir, ent.PoliticaStock);
         Assert.NotEmpty(ent.MensajePieTicket);
         Assert.NotEmpty(ent.PoliticaGarantiaTicket);
     }

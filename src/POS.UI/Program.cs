@@ -29,6 +29,19 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Servicios MVC. Toda acción requiere autenticación por defecto (el atributo [AllowAnonymous]
 // es la única excepción explícita) y toda petición que modifica estado exige token antiforgery.
+// Antiforgery EXPLÍCITO (Fase 3): el contrato del terminal es la cabecera RequestVerificationToken.
+// Antes dependíamos del valor por defecto del framework; fijarlo evita que un cambio silencioso de
+// defaults deje sin poder cobrar a todos los terminales.
+builder.Services.AddAntiforgery(opciones =>
+{
+    opciones.HeaderName = "RequestVerificationToken";
+    opciones.Cookie.Name = "PosPalasy.Antiforgery";
+    opciones.Cookie.HttpOnly = true;
+    // El token de la cookie debe viajar aunque la sesión sea segura; SameSite estricta como la de sesión.
+    opciones.Cookie.SameSite = SameSiteMode.Strict;
+    opciones.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+});
+
 builder.Services.AddControllersWithViews(opciones =>
 {
     opciones.Filters.Add(new AuthorizeFilter(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build()));
@@ -100,6 +113,7 @@ builder.Services.AddScoped<IEmisionDGIIQueueRepository, EmisionDGIIQueueReposito
 builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
 builder.Services.AddScoped<IAutenticacionService, AutenticacionService>();
 builder.Services.AddScoped<ISecuenciaECFRepository, SecuenciaECFRepository>();
+builder.Services.AddScoped<IAuditoriaRepository, POS.Infrastructure.Persistence.Repositories.AuditoriaRepository>();
 
 // Frontera transaccional y casos de uso
 builder.Services.AddScoped<IUnidadDeTrabajo, UnidadDeTrabajo>();

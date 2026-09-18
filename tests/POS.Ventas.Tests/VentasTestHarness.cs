@@ -75,7 +75,7 @@ internal sealed class VentasTestHarness : IAsyncDisposable
             Email = "pruebas@pospalasy.test",
             CodigoProvincia = "01",
             CodigoMunicipio = "010100",
-            PermitirVentaSinStock = permitirVentaSinStock,
+            PoliticaStock = permitirVentaSinStock ? PoliticaStock.Permitir : PoliticaStock.Bloquear,
             EstaActiva = true
         };
         empresa.Sucursales.Add(new Sucursal

@@ -1,3 +1,4 @@
+using POS.Domain.Enums;
 using POS.Domain.Types;
 
 namespace POS.Application.DTOs;
@@ -14,7 +15,15 @@ public class ConfiguracionEmpresaDto
     public string CodigoProvincia { get; set; } = "01";
     public string CodigoMunicipio { get; set; } = "010100";
     public TipoeCFType TipoComprobantePredeterminado { get; set; } = TipoeCFType.FacturaConsumo;
-    public bool PermitirVentaSinStock { get; set; } = true;
+
+    /// <summary>
+    /// Política operativa de existencias (Permitir / Advertir / Bloquear), impuesta por el servidor
+    /// en cada venta. Su cambio queda auditado (usuario, fecha, valor anterior, nuevo y motivo).
+    /// </summary>
+    public PoliticaStock PoliticaStock { get; set; } = PoliticaStock.Permitir;
+
+    /// <summary>Motivo declarado al cambiar la política de stock (opcional, queda en la auditoría).</summary>
+    public string? MotivoCambioPoliticaStock { get; set; }
 }
 
 public class ConfiguracionFacturaFisicaDto

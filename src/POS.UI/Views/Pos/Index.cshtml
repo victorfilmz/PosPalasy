@@ -526,17 +526,20 @@
         });
     }
 
-    const permitirVentaSinStock = @((enterprise?.PermitirVentaSinStock ?? false) ? "true" : "false");
+    // Política de stock impuesta por el servidor (Fase 3). La UI solo la usa para una mejor
+    // experiencia; la autoridad real es el caso de uso, que rechaza o marca según la política.
+    const politicaStock = '@(enterprise?.PoliticaStock.ToString() ?? PoliticaStock.Permitir.ToString())';
+    const bloquearVentaSinStock = politicaStock === 'Bloquear';
 
     function agregarAlCarrito(id, codigo, descripcion, precio, indicadorFacturacion, tasaITBIS, unidadMedida, unidadNombre, stockActual = 999999) {
-        if (!permitirVentaSinStock && stockActual <= 0) {
+        if (bloquearVentaSinStock && stockActual <= 0) {
             alert(`El producto "${descripcion}" no tiene existencias disponibles en inventario (Stock: 0).`);
             return;
         }
 
         const itemExistente = carrito.find(x => x.productoId === id);
         if (itemExistente) {
-            if (!permitirVentaSinStock && (itemExistente.cantidad + 1) > stockActual) {
+            if (bloquearVentaSinStock && (itemExistente.cantidad + 1) > stockActual) {
                 alert(`Stock máximo alcanzado para "${descripcion}" (${stockActual} disponibles).`);
                 return;
             }

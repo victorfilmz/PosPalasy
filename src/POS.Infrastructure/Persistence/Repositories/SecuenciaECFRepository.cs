@@ -13,15 +13,18 @@ namespace POS.Infrastructure.Persistence.Repositories;
 /// Repositorio de la numeración fiscal (eNCF).
 /// </summary>
 /// <remarks>
-/// La asignación se apoya en dos barreras:
+/// La asignación se apoya en tres barreras (Fase 3):
 /// <list type="number">
-/// <item>Concurrencia optimista sobre la fila de la serie: si otra venta incrementó el contador en
-/// el intervalo, EF no actualiza ninguna fila y se repite la lectura.</item>
-/// <item>Índice único sobre <c>ElectronicInvoices.eNCF</c>: aun con un fallo de la barrera anterior,
-/// la base de datos impide que dos comprobantes compartan número.</item>
+/// <item><b>Bloqueo de fila en SQL Server (UPDLOCK, ROWLOCK)</b> sobre la fila de la serie: los
+/// emisores se serializan en el punto fiscal y el número se libera si la venta revierte (sin huecos).
+/// Funciona con cualquier cantidad de instancias de la aplicación; no hay contadores en memoria.</item>
+/// <item>Concurrencia optimista sobre la fila de la serie (red de seguridad para proveedores sin
+/// sugerencias de bloqueo, como SQLite en pruebas): si otra venta incrementó el contador en el
+/// intervalo, EF no actualiza ninguna fila y se repite la lectura.</item>
+/// <item>Índice único sobre <c>ElectronicInvoices.eNCF</c>: aun con un fallo de las barreras
+/// anteriores, la base de datos impide que dos comprobantes compartan número.</item>
 /// </list>
-/// La asignación se realiza dentro de la transacción de la venta, por lo que un revertimiento libera
-/// el número en lugar de dejar un hueco en la secuencia.
+/// La asignación se realiza dentro de la transacción de la venta.
 /// </remarks>
 public sealed class SecuenciaECFRepository : ISecuenciaECFRepository
 {
@@ -40,7 +43,15 @@ public sealed class SecuenciaECFRepository : ISecuenciaECFRepository
 
         for (var intento = 1; intento <= MaxIntentosAsignacion; intento++)
         {
-            var secuencia = await _context.SecuenciasECF.FirstOrDefaultAsync(s => s.Serie == serie, ct);
+            // SQL Server: lectura con bloqueo de la fila de la serie hasta el fin de la transacción:
+            // el siguiente emisor espera aquí en lugar de perder la carrera y reintentar a ciegas.
+            // Otros proveedores (SQLite en pruebas): lectura plana + camino optimista.
+            var consulta = _context.Database.IsSqlServer()
+                ? _context.SecuenciasECF.FromSqlInterpolated(
+                    $"SELECT * FROM [SecuenciasECF] WITH (UPDLOCK, ROWLOCK) WHERE [Serie] = {serie}")
+                : _context.SecuenciasECF.Where(s => s.Serie == serie);
+
+            var secuencia = await consulta.FirstOrDefaultAsync(ct);
 
             if (secuencia == null)
             {

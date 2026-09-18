@@ -26,6 +26,7 @@ public class POSDbContext : DbContext
     public DbSet<EmisionDGIIQueue> EmisionesDGIIQueue => Set<EmisionDGIIQueue>();
     public DbSet<Usuario> Usuarios => Set<Usuario>();
     public DbSet<SecuenciaECF> SecuenciasECF => Set<SecuenciaECF>();
+    public DbSet<AuditoriaCambio> AuditoriaCambios => Set<AuditoriaCambio>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -61,7 +62,21 @@ public class POSDbContext : DbContext
             b.Property(e => e.MensajeEncabezadoExtra).HasMaxLength(200);
             b.Property(e => e.MensajePieTicket).HasMaxLength(250);
             b.Property(e => e.PoliticaGarantiaTicket).HasMaxLength(500);
+            b.Property(e => e.PoliticaStock).HasConversion<int>();
             b.HasIndex(e => e.RNC);
+        });
+
+        // Auditoría mínima de cambios de configuración (Fase 3)
+        modelBuilder.Entity<AuditoriaCambio>(b =>
+        {
+            b.HasKey(a => a.Id);
+            b.Property(a => a.Usuario).HasMaxLength(100).IsRequired();
+            b.Property(a => a.Entidad).HasMaxLength(100).IsRequired();
+            b.Property(a => a.Campo).HasMaxLength(100).IsRequired();
+            b.Property(a => a.ValorAnterior).HasMaxLength(200).IsRequired();
+            b.Property(a => a.ValorNuevo).HasMaxLength(200).IsRequired();
+            b.Property(a => a.Motivo).HasMaxLength(500);
+            b.HasIndex(a => new { a.Entidad, a.Campo, a.FechaUtc });
         });
 
         // Sucursal
@@ -173,6 +188,7 @@ public class POSDbContext : DbContext
             b.Property(m => m.Concepto).HasMaxLength(250).IsRequired();
             b.Property(m => m.ReferenciaDocumento).HasMaxLength(100);
             b.Property(m => m.Usuario).HasMaxLength(100);
+            b.Property(m => m.RequiereRevision).HasDefaultValue(false);
 
             b.HasOne(m => m.Producto)
                 .WithMany()
@@ -203,6 +219,7 @@ public class POSDbContext : DbContext
             b.Property(v => v.Total).HasPrecision(18, 2);
             b.Property(v => v.MontoRecibido).HasPrecision(18, 2);
             b.Property(v => v.Cambio).HasPrecision(18, 2);
+            b.Property(v => v.RequiereRevisionStock).HasDefaultValue(false);
 
             // Barrera de idempotencia: una misma solicitud no puede producir dos ventas.
             b.HasIndex(v => v.ClaveIdempotencia).IsUnique();

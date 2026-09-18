@@ -66,16 +66,23 @@ El registro de una venta es un caso de uso de `POS.Application` (`ProcesarVentaH
 controlador. Todo lo que ocurre en una venta es **una sola transacción** de base de datos:
 
 - el precio, el ITBIS, la unidad de medida y la descripción los resuelve el **servidor** desde el catálogo;
-- la numeración fiscal (eNCF) se asigna dentro de la transacción y está protegida por índice único, con
-  reintento ante carrera;
+- la numeración fiscal (eNCF) se asigna dentro de la transacción con bloqueo de fila en SQL Server
+  (`UPDLOCK, ROWLOCK`), concurrencia optimista como red de seguridad e índice único como última barrera:
+  0 duplicados verificados hasta con 100 ventas simultáneas;
 - existencias, kardex, acumulado de caja, comprobante y cola de emisión se confirman o se revierten juntos;
+- la **política de existencias** (`Permitir` / `Advertir` / `Bloquear`) la impone el servidor y su cambio
+  queda auditado;
 - la transmisión a la DGII ocurre **fuera** de la transacción: un fallo de red no revierte una venta ya
   cobrada ni se reporta como comprobante aceptado;
 - cada intento lleva una clave de idempotencia: doble clic, doble POST, recarga o reintento no producen
   dos ventas, dos movimientos de inventario, dos movimientos de caja ni dos e-CF.
+- El registro de ventas tiene **un único camino** (`ProcesarVentaHandler`): la emisión manual de
+  comprobantes sin venta fue retirada en la Fase 3.
 
 Flujo completo, máquina de estados, idempotencia y matriz de escenarios:
 [`documentacion/07_Flujo_Venta_Transaccional.md`](documentacion/07_Flujo_Venta_Transaccional.md).
+Política de existencias: [`documentacion/08_Politica_Stock.md`](documentacion/08_Politica_Stock.md).
+Numeración fiscal bajo concurrencia: [`documentacion/09_Concurrencia_eNCF.md`](documentacion/09_Concurrencia_eNCF.md).
 
 ## Pruebas
 
