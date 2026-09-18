@@ -1,21 +1,38 @@
+using System;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using POS.Application.Interfaces;
+using POS.Application.Security;
 using POS.Application.Services;
 using POS.Domain.Repositories;
 using POS.Infrastructure.DGII;
 using POS.Infrastructure.Persistence;
 using POS.Infrastructure.Persistence.Repositories;
+using POS.Infrastructure.Security;
 using POS.Infrastructure.Services;
 using POS.Infrastructure.XmlSerialization;
+using POS.UI.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-builder.Services.AddControllersWithViews();
+// Servicios MVC. Toda acción requiere autenticación por defecto (el atributo [AllowAnonymous]
+// es la única excepción explícita) y toda petición que modifica estado exige token antiforgery.
+builder.Services.AddControllersWithViews(opciones =>
+{
+    opciones.Filters.Add(new AuthorizeFilter(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build()));
+    opciones.Filters.Add(new AutoValidateAntiforgeryTokenAttribute());
+});
 
 // Base de Datos EF Core
 builder.Services.AddDbContext<POSDbContext>(options =>
@@ -25,6 +42,33 @@ builder.Services.AddDbContext<POSDbContext>(options =>
 var dgiiConfig = new DgiiConfig();
 builder.Configuration.GetSection("DGII").Bind(dgiiConfig);
 builder.Services.AddSingleton(dgiiConfig);
+
+// Autenticación por cookie y autorización por políticas (matriz de permisos)
+builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(opciones =>
+    {
+        opciones.LoginPath = "/Cuenta/Login";
+        opciones.LogoutPath = "/Cuenta/Logout";
+        opciones.AccessDeniedPath = "/Cuenta/AccesoDenegado";
+        opciones.ReturnUrlParameter = "returnUrl";
+        opciones.Cookie.Name = "PosPalasy.Sesion";
+        opciones.Cookie.HttpOnly = true;
+        opciones.Cookie.SameSite = SameSiteMode.Strict;
+        // En producción la cookie solo viaja por HTTPS; en desarrollo se permite HTTP local.
+        opciones.Cookie.SecurePolicy = builder.Environment.IsDevelopment()
+            ? CookieSecurePolicy.SameAsRequest
+            : CookieSecurePolicy.Always;
+        opciones.ExpireTimeSpan = TimeSpan.FromHours(12); // duración de un turno
+        opciones.SlidingExpiration = true;
+    });
+
+builder.Services.AddAuthorization(Politicas.AgregarPoliticas);
+
+// Seguridad de cuentas: hashing de contraseñas y cuenta administradora inicial
+builder.Services.AddSingleton<IPasswordHasher, IdentityPasswordHasher>();
+var opcionesAdminInicial = new OpcionesAdminInicial();
+builder.Configuration.GetSection("Seguridad:AdminInicial").Bind(opcionesAdminInicial);
+builder.Services.AddSingleton(opcionesAdminInicial);
 
 // Servicios de Dominio y Aplicación
 builder.Services.AddSingleton<ITaxCalculator, TaxCalculator>();
@@ -52,12 +96,23 @@ builder.Services.AddScoped<IInventarioAlmacenRepository, InventarioAlmacenReposi
 builder.Services.AddScoped<ISucursalRepository, SucursalRepository>();
 builder.Services.AddScoped<IProveedorRepository, ProveedorRepository>();
 builder.Services.AddScoped<IEmisionDGIIQueueRepository, EmisionDGIIQueueRepository>();
+builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
+builder.Services.AddScoped<IAutenticacionService, AutenticacionService>();
 
 // Servicio Orquestador de Facturación Electrónica DGII
 builder.Services.AddScoped<IElectronicInvoiceService, DgiiElectronicInvoiceService>();
 
 // Servicio en segundo plano para resiliencia y cola offline DGII
 builder.Services.AddHostedService<POS.UI.Services.DgiiQueueBackgroundService>();
+
+// Guarda de entorno: el simulador DGII no puede estar activo fuera de desarrollo.
+// Un simulador activo en producción reporta comprobantes "enviados" que nunca salieron del sistema.
+if (dgiiConfig.ModoSimulador && !builder.Environment.IsDevelopment())
+{
+    throw new InvalidOperationException(
+        "DGII:ModoSimulador está activo en un entorno que no es Development (" +
+        $"{builder.Environment.EnvironmentName}). Configure DGII:ModoSimulador=false antes de operar con la DGII.");
+}
 
 var app = builder.Build();
 
@@ -70,6 +125,11 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseRouting();
+
+app.UseAuthentication();
+
+// Obliga el cambio de contraseña antes de permitir cualquier operación.
+app.UseMiddleware<CambioPasswordObligatorioMiddleware>();
 
 app.UseAuthorization();
 
@@ -86,13 +146,26 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var dbContext = scope.ServiceProvider.GetRequiredService<POSDbContext>();
-        await DbInitializer.SeedAsync(dbContext);
+        var passwordHasher = scope.ServiceProvider.GetRequiredService<IPasswordHasher>();
+        var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+        await DbInitializer.SeedAsync(dbContext, passwordHasher, opcionesAdminInicial, logger);
     }
     catch (Exception ex)
     {
         var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
-        logger.LogWarning(ex, "Aviso: No se pudo conectar a SQL Server para inicializar datos semilla. La aplicación continuará funcionando.");
+
+        // La inicialización incluye la cuenta administradora: si falla, el sistema queda sin
+        // usuarios y nadie podrá iniciar sesión. El aviso debe ser explícito y accionable.
+        logger.LogCritical(
+            ex,
+            "Fallo la inicialización de la base de datos (esquema, datos semilla o cuenta administradora). " +
+            "Mientras esto no se corrija, la aplicación no permitirá iniciar sesión a ningún usuario.");
     }
 }
 
 app.Run();
+
+/// <summary>
+/// Punto de entrada expuesto para las pruebas de integración HTTP (WebApplicationFactory).
+/// </summary>
+public partial class Program { }

@@ -9,6 +9,9 @@
     var sucursalActiva = ViewBag.SucursalActiva as POS.Domain.Entities.Sucursal;
 }
 
+<!-- Token antiforgery para el POST JSON de procesamiento de venta -->
+<form id="formAntiforgery" class="d-none" aria-hidden="true">@Html.AntiForgeryToken()</form>
+
 <!-- Terminal POS Viewport 100vh Locked -->
 <div class="pos-viewport-locked">
 
@@ -374,6 +377,12 @@
 
 @section Scripts {
 <script>
+    // Token antiforgery emitido por el servidor para peticiones AJAX de modificación.
+    function obtenerTokenAntiforgery() {
+        const campo = document.querySelector('#formAntiforgery input[name="__RequestVerificationToken"]');
+        return campo ? campo.value : '';
+    }
+
     // Estado en Memoria del Carrito
     let carrito = [];
     let modalCobroInstancia = null;
@@ -835,7 +844,11 @@
         try {
             const resp = await fetch('@Url.Action("ProcesarVenta", "Pos")', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    // Token antiforgery: el POST de venta queda protegido contra CSRF.
+                    'RequestVerificationToken': obtenerTokenAntiforgery()
+                },
                 body: JSON.stringify(payload)
             });
 

@@ -2,14 +2,21 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using POS.Application.DTOs;
 using POS.Domain.Entities;
 using POS.Domain.Repositories;
 using POS.Domain.Types;
+using POS.UI.Security;
 
 namespace POS.UI.Controllers;
 
+/// <summary>
+/// Catálogo de productos y control de existencias por sucursal (stock, kardex y ajustes).
+/// Consulta para cualquier operador; alta/edición/baja solo administración; ajustes con supervisión.
+/// </summary>
+[Authorize(Policy = Politicas.OperacionPos)]
 public class InventarioController : Controller
 {
     private readonly IProductoRepository _productoRepo;
@@ -190,6 +197,7 @@ public class InventarioController : Controller
     }
 
     [HttpPost]
+    [Authorize(Policy = Politicas.Configuracion)]
     public async Task<IActionResult> Crear(CrearProductoDto model)
     {
         if (string.IsNullOrWhiteSpace(model.Codigo) || string.IsNullOrWhiteSpace(model.Descripcion))
@@ -304,6 +312,7 @@ public class InventarioController : Controller
     }
 
     [HttpPost]
+    [Authorize(Policy = Politicas.Configuracion)]
     public async Task<IActionResult> Editar(EditarProductoDto model)
     {
         if (string.IsNullOrWhiteSpace(model.Codigo) || string.IsNullOrWhiteSpace(model.Descripcion))
@@ -351,6 +360,7 @@ public class InventarioController : Controller
     }
 
     [HttpPost]
+    [Authorize(Policy = Politicas.Configuracion)]
     public async Task<IActionResult> Eliminar(int id)
     {
         var producto = await _productoRepo.GetByIdAsync(id);
@@ -380,6 +390,7 @@ public class InventarioController : Controller
     }
 
     [HttpPost]
+    [Authorize(Policy = Politicas.Supervision)]
     public async Task<IActionResult> AjustarStock(AjusteStockDto model)
     {
         if (model.Cantidad <= 0)

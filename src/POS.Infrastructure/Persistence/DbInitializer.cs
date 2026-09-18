@@ -1,14 +1,29 @@
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using POS.Application.Interfaces;
+using POS.Application.Validators;
 using POS.Domain.Entities;
+using POS.Domain.Enums;
 using POS.Domain.Types;
 
 namespace POS.Infrastructure.Persistence;
 
 public static class DbInitializer
 {
-    public static async Task SeedAsync(POSDbContext context)
+    /// <summary>
+    /// Inicializa la base de datos: esquema faltante, datos semilla y cuenta administradora inicial.
+    /// </summary>
+    /// <param name="passwordHasher">Servicio de hashing; la contraseña inicial nunca se almacena en claro.</param>
+    /// <param name="opcionesAdmin">Credenciales de la cuenta inicial leídas de configuración.</param>
+    /// <param name="logger">Registro de avisos (DDL directo, contraseña inicial generada).</param>
+    public static async Task SeedAsync(
+        POSDbContext context,
+        IPasswordHasher passwordHasher,
+        OpcionesAdminInicial opcionesAdmin,
+        ILogger? logger = null)
     {
         // Asegurar que la base de datos existe
         await context.Database.EnsureCreatedAsync();
@@ -228,7 +243,43 @@ END
 ";
             await context.Database.ExecuteSqlRawAsync(createCajaSql);
         }
-        catch { }
+        catch (Exception ex)
+        {
+            // En proveedores sin compatibilidad con este DDL (por ejemplo SQLite en pruebas) el esquema ya
+            // fue creado por EnsureCreated; se registra el aviso en lugar de silenciar el error.
+            logger?.LogWarning(ex, "No se pudo aplicar el DDL de control (Caja/Sucursal/Inventario) sobre la base existente.");
+        }
+
+        // Control de seguridad: tabla de usuarios para bases ya existentes creadas con EnsureCreated.
+        try
+        {
+            var createUsuariosSql = @"
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Usuarios')
+BEGIN
+    CREATE TABLE [Usuarios] (
+        [Id] int NOT NULL IDENTITY,
+        [NombreUsuario] nvarchar(60) NOT NULL,
+        [NombreCompleto] nvarchar(150) NOT NULL,
+        [PasswordHash] nvarchar(500) NOT NULL,
+        [Rol] int NOT NULL,
+        [EstaActivo] bit NOT NULL DEFAULT 1,
+        [DebeCambiarPassword] bit NOT NULL DEFAULT 0,
+        [IntentosFallidos] int NOT NULL DEFAULT 0,
+        [BloqueadoHasta] datetime2 NULL,
+        [UltimoAcceso] datetime2 NULL,
+        [CreatedAt] datetime2 NOT NULL DEFAULT (GETUTCDATE()),
+        [UpdatedAt] datetime2 NULL,
+        CONSTRAINT [PK_Usuarios] PRIMARY KEY ([Id])
+    );
+    CREATE UNIQUE INDEX [IX_Usuarios_NombreUsuario] ON [Usuarios] ([NombreUsuario]);
+END
+";
+            await context.Database.ExecuteSqlRawAsync(createUsuariosSql);
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "No se pudo aplicar el DDL de la tabla Usuarios sobre la base existente.");
+        }
 
         // 1. Empresa Emisora por Defecto
         if (!await context.Enterprises.AnyAsync())
@@ -413,6 +464,66 @@ END
                 }
             }
             await context.SaveChangesAsync();
+        }
+
+        // 7. Cuenta administradora inicial del sistema (seguridad)
+        await SeedUsuarioInicialAsync(context, passwordHasher, opcionesAdmin, logger);
+    }
+
+    /// <summary>
+    /// Crea la primera cuenta de sistema (SuperAdmin) únicamente si no existe ningún usuario.
+    /// La contraseña proviene de configuración; si no cumple la política o no fue definida, se genera
+    /// una aleatoria, se marca la cuenta para cambio obligatorio y se informa una sola vez por el log.
+    /// </summary>
+    private static async Task SeedUsuarioInicialAsync(
+        POSDbContext context,
+        IPasswordHasher passwordHasher,
+        OpcionesAdminInicial opcionesAdmin,
+        ILogger? logger)
+    {
+        if (await context.Usuarios.AnyAsync())
+            return;
+
+        var nombreUsuario = string.IsNullOrWhiteSpace(opcionesAdmin.Usuario)
+            ? "admin"
+            : opcionesAdmin.Usuario.Trim();
+
+        var passwordConfigurada = opcionesAdmin.Password;
+        var passwordValida = !string.IsNullOrWhiteSpace(passwordConfigurada)
+            && PasswordPolicy.Validar(passwordConfigurada, nombreUsuario).EsValido;
+
+        var passwordInicial = passwordValida ? passwordConfigurada! : PasswordPolicy.GenerarAleatoria();
+
+        var admin = new Usuario
+        {
+            NombreUsuario = nombreUsuario,
+            NombreCompleto = string.IsNullOrWhiteSpace(opcionesAdmin.NombreCompleto)
+                ? "Administrador del Sistema"
+                : opcionesAdmin.NombreCompleto.Trim(),
+            Rol = RolUsuario.SuperAdmin,
+            EstaActivo = true
+        };
+
+        admin.EstablecerPassword(passwordHasher.Hash(passwordInicial));
+
+        // Una contraseña generada por el sistema debe cambiarse en el primer acceso.
+        // (EstablecerPassword limpia la marca, por lo que se aplica después del hashing).
+        admin.DebeCambiarPassword = !passwordValida;
+
+        await context.Usuarios.AddAsync(admin);
+        await context.SaveChangesAsync();
+
+        if (!passwordValida)
+        {
+            logger?.LogWarning(
+                "Cuenta inicial creada: usuario '{Usuario}' con contraseña temporal generada. " +
+                "Defina Seguridad:AdminInicial:Password (o variable de entorno) para fijarla. " +
+                "La cuenta está marcada para cambio obligatorio de contraseña en el primer acceso. Contraseña temporal: {PasswordTemporal}",
+                nombreUsuario, passwordInicial);
+        }
+        else
+        {
+            logger?.LogInformation("Cuenta inicial '{Usuario}' creada con la contraseña definida en configuración.", nombreUsuario);
         }
     }
 }

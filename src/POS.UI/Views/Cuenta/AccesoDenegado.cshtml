@@ -1,0 +1,20 @@
+@{
+    ViewData["Title"] = "Acceso denegado";
+}
+
+<div class="container-fluid px-4 py-5" style="max-width: 640px;">
+    <div class="card border-0 shadow-sm rounded-4 text-center">
+        <div class="card-body p-5">
+            <i class="bi bi-shield-x text-danger" style="font-size: 3rem;"></i>
+            <h4 class="fw-bold text-dark mt-3">Acceso denegado</h4>
+            <p class="text-muted mb-4">
+                Su rol no tiene permisos para esta operación. Si necesita acceso,
+                solicítelo al administrador del sistema: las operaciones fiscales y de
+                configuración quedan registradas con el usuario que las ejecuta.
+            </p>
+            <a asp-controller="Dashboard" asp-action="Index" class="btn btn-dark fw-semibold">
+                <i class="bi bi-speedometer2 me-2"></i>Volver al inicio
+            </a>
+        </div>
+    </div>
+</div>

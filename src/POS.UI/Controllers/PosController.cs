@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using POS.Application.DTOs;
 using POS.Application.Interfaces;
@@ -11,9 +12,15 @@ using POS.Domain.Enums;
 using POS.Domain.Repositories;
 using POS.Domain.Types;
 using POS.Infrastructure.DGII;
+using POS.UI.Security;
 
 namespace POS.UI.Controllers;
 
+/// <summary>
+/// Terminal de punto de venta: catálogo, procesamiento de la venta e impresión del ticket.
+/// Requiere un usuario autenticado con permiso de operación de POS.
+/// </summary>
+[Authorize(Policy = Politicas.OperacionPos)]
 public class PosController : Controller
 {
     private readonly IProductoRepository _productoRepo;

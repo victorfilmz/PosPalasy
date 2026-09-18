@@ -3,13 +3,20 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using POS.Application.Interfaces;
 using POS.Domain.Entities;
 using POS.Domain.Repositories;
+using POS.UI.Security;
 
 namespace POS.UI.Controllers;
 
+/// <summary>
+/// Reportes fiscales para la DGII (Libro de Ventas 607 y resumen de ITBIS del IT-1).
+/// Solo roles contables, de supervisión o administración.
+/// </summary>
+[Authorize(Policy = Politicas.ReportesFiscales)]
 public class ReportesController : Controller
 {
     private readonly IInvoiceRepository _invoiceRepo;

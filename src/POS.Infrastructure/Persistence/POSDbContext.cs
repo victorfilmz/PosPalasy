@@ -24,10 +24,22 @@ public class POSDbContext : DbContext
     public DbSet<Proveedor> Proveedores => Set<Proveedor>();
     public DbSet<PagoFactura> PagosFactura => Set<PagoFactura>();
     public DbSet<EmisionDGIIQueue> EmisionesDGIIQueue => Set<EmisionDGIIQueue>();
+    public DbSet<Usuario> Usuarios => Set<Usuario>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        // Usuario (seguridad)
+        modelBuilder.Entity<Usuario>(b =>
+        {
+            b.HasKey(u => u.Id);
+            b.Property(u => u.NombreUsuario).HasMaxLength(60).IsRequired();
+            b.Property(u => u.NombreCompleto).HasMaxLength(150).IsRequired();
+            b.Property(u => u.PasswordHash).HasMaxLength(500).IsRequired();
+            b.Property(u => u.Rol).HasConversion<int>();
+            b.HasIndex(u => u.NombreUsuario).IsUnique();
+        });
 
         // Enterprise
         modelBuilder.Entity<Enterprise>(b =>

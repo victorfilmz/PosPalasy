@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using POS.Application.DTOs;
 using POS.Application.Interfaces;
@@ -8,9 +9,15 @@ using POS.Application.Services;
 using POS.Domain.Enums;
 using POS.Domain.Repositories;
 using POS.Domain.Types;
+using POS.UI.Security;
 
 namespace POS.UI.Controllers;
 
+/// <summary>
+/// Comprobantes fiscales electrónicos: listado, detalle, emisión manual, reenvío y anulación.
+/// Las operaciones que alteran el estado fiscal exigen supervisión, no solo operación de POS.
+/// </summary>
+[Authorize(Policy = Politicas.OperacionPos)]
 public class FacturacionController : Controller
 {
     private readonly IInvoiceRepository _invoiceRepo;
@@ -51,6 +58,7 @@ public class FacturacionController : Controller
     }
 
     [HttpGet]
+    [Authorize(Policy = Politicas.Supervision)]
     public async Task<IActionResult> Emitir()
     {
         var enterprise = await _enterpriseRepo.GetDefaultAsync();
@@ -90,6 +98,7 @@ public class FacturacionController : Controller
     }
 
     [HttpPost]
+    [Authorize(Policy = Politicas.Supervision)]
     public async Task<IActionResult> Emitir(ElectronicInvoiceRequest request)
     {
         request.Totales = _taxCalculator.CalcularTotales(request.Items);
@@ -121,6 +130,7 @@ public class FacturacionController : Controller
     }
 
     [HttpPost]
+    [Authorize(Policy = Politicas.Supervision)]
     public async Task<IActionResult> ConsultarEstado(int id)
     {
         var invoice = await _invoiceRepo.GetByIdAsync(id);
@@ -140,6 +150,7 @@ public class FacturacionController : Controller
     }
 
     [HttpPost]
+    [Authorize(Policy = Politicas.Supervision)]
     public async Task<IActionResult> Reenviar(string encf)
     {
         var response = await _invoiceService.ReenviarAsync(encf);
@@ -152,6 +163,7 @@ public class FacturacionController : Controller
     }
 
     [HttpGet]
+    [Authorize(Policy = Politicas.Supervision)]
     public async Task<IActionResult> Anulaciones()
     {
         var anulaciones = await _anulacionRepo.GetAllAsync();
@@ -159,6 +171,7 @@ public class FacturacionController : Controller
     }
 
     [HttpPost]
+    [Authorize(Policy = Politicas.Supervision)]
     public async Task<IActionResult> Anular(int id, int codigoMotivo, string motivo)
     {
         var invoice = await _invoiceRepo.GetByIdAsync(id);

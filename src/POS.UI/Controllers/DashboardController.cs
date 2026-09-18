@@ -1,10 +1,16 @@
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using POS.Domain.Enums;
 using POS.Domain.Repositories;
 
 namespace POS.UI.Controllers;
 
+/// <summary>
+/// Panel de métricas de comprobantes electrónicos. Accesible a cualquier usuario autenticado
+/// (la información consolidada de reportes queda restringida en su propio controlador).
+/// </summary>
+[Authorize]
 public class DashboardController : Controller
 {
     private readonly IInvoiceRepository _invoiceRepo;

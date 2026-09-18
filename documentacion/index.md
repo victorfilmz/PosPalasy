@@ -6,6 +6,7 @@
 > 📁 [03_Interfaces_Servicios.md](03_Interfaces_Servicios.md) — Contratos de interfaces y servicios
 > 📁 [04_Diseno_Infraestructura_DGII.md](04_Diseno_Infraestructura_DGII.md) — Diseño de la infraestructura DGII
 > 📁 [05_Plan_Implementacion.md](05_Plan_Implementacion.md) — Plan de implementación paso a paso
+> 📁 [06_Seguridad_Matriz_Permisos.md](06_Seguridad_Matriz_Permisos.md) — **Seguridad: roles, matriz de permisos y controles aplicados**
 > 📁 [README.md](README.md) — Documentación principal y guía de inicio
 >
 > ---

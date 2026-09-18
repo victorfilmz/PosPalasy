@@ -1,0 +1,51 @@
+@model POS.UI.Models.LoginViewModel
+@{
+    ViewData["Title"] = "Iniciar sesión";
+    Layout = "_LayoutCuenta";
+}
+
+<div class="card border-0 shadow-lg rounded-4 overflow-hidden">
+    <div class="card-body p-4 p-md-5">
+        <div class="text-center mb-4">
+            <img src="~/images/logo.svg" height="48" alt="PosPalasy Fiscal POS" class="mb-3" />
+            <h4 class="fw-bold text-dark mb-1">Acceso al sistema</h4>
+            <p class="text-muted small mb-0">Punto de Venta y Facturación Electrónica e-CF</p>
+        </div>
+
+        <form asp-action="Login" method="post" autocomplete="off">
+            <input type="hidden" asp-for="ReturnUrl" />
+
+            <div asp-validation-summary="ModelOnly" class="alert alert-danger py-2 small" role="alert"></div>
+
+            <div class="mb-3">
+                <label asp-for="Usuario" class="form-label fw-bold small text-slate-700"></label>
+                <div class="input-group">
+                    <span class="input-group-text bg-white"><i class="bi bi-person"></i></span>
+                    <input asp-for="Usuario" class="form-control" autofocus autocomplete="username" />
+                </div>
+                <span asp-validation-for="Usuario" class="text-danger small"></span>
+            </div>
+
+            <div class="mb-4">
+                <label asp-for="Password" class="form-label fw-bold small text-slate-700"></label>
+                <div class="input-group">
+                    <span class="input-group-text bg-white"><i class="bi bi-key"></i></span>
+                    <input asp-for="Password" class="form-control" autocomplete="current-password" />
+                </div>
+                <span asp-validation-for="Password" class="text-danger small"></span>
+            </div>
+
+            <button type="submit" class="btn btn-primary w-100 fw-bold py-2">
+                <i class="bi bi-box-arrow-in-right me-2"></i>Entrar
+            </button>
+        </form>
+    </div>
+</div>
+
+<p class="text-center text-muted small mt-3 mb-0">
+    El acceso queda registrado. Tras @POS.Domain.Entities.Usuario.MaxIntentosFallidos intentos fallidos la cuenta se bloquea temporalmente.
+</p>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

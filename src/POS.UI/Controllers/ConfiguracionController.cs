@@ -4,15 +4,23 @@ using System.IO;
 using System.Net.Http;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using POS.Application.DTOs;
 using POS.Domain.Repositories;
 using POS.Infrastructure.DGII;
+using POS.UI.Security;
 
 namespace POS.UI.Controllers;
 
+/// <summary>
+/// Configuración del sistema: datos de la empresa, certificado digital, formato de impresión y
+/// ambiente DGII. El cambio de ambiente queda reservado al rol SuperAdmin por su impacto fiscal
+/// sobre todos los usuarios.
+/// </summary>
+[Authorize(Policy = Politicas.Configuracion)]
 public class ConfiguracionController : Controller
 {
     private readonly IConfiguration _configuration;
@@ -35,7 +43,7 @@ public class ConfiguracionController : Controller
     [HttpGet]
     public async Task<IActionResult> Certificado()
     {
-        var rutaCert = _configuration["Certificado:RutaCertificado"] ?? "certificados/emisor.pfx";
+        var rutaCert = ObtenerRutaCertificado();
         var password = _configuration["Certificado:Password"] ?? "";
 
         var dto = new ConfiguracionCertificadoDto
@@ -50,7 +58,7 @@ public class ConfiguracionController : Controller
             dto.TieneCertificado = true;
             try
             {
-                using var cert = new X509Certificate2(rutaCert, password, X509KeyStorageFlags.Exportable);
+                using var cert = X509CertificateLoader.LoadPkcs12FromFile(rutaCert, password, X509KeyStorageFlags.EphemeralKeySet);
                 dto.Sujeto = cert.Subject;
                 dto.EmisorCertificado = cert.Issuer;
                 dto.NumeroSerie = cert.SerialNumber;
@@ -98,7 +106,7 @@ public class ConfiguracionController : Controller
         // Validar contraseña cargando el certificado
         try
         {
-            using var testCert = new X509Certificate2(certBytes, password ?? "", X509KeyStorageFlags.DefaultKeySet);
+            using var testCert = X509CertificateLoader.LoadPkcs12(certBytes, password ?? string.Empty, X509KeyStorageFlags.EphemeralKeySet);
             if (!testCert.HasPrivateKey)
             {
                 TempData["Error"] = "El certificado seleccionado no contiene la clave privada requerida para firmar documentos XML-DSig.";
@@ -111,18 +119,23 @@ public class ConfiguracionController : Controller
             return RedirectToAction(nameof(Certificado));
         }
 
-        // Guardar archivo en la carpeta de certificados
-        var certDir = Path.Combine(Directory.GetCurrentDirectory(), "certificados");
+        // Guardar el certificado fuera del directorio de la aplicación: no se pierde al publicar
+        // ni queda accesible desde el contenido web servido.
+        var certDir = ObtenerDirectorioDatos();
         if (!Directory.Exists(certDir)) Directory.CreateDirectory(certDir);
 
         var destPath = Path.Combine(certDir, "emisor.pfx");
         await System.IO.File.WriteAllBytesAsync(destPath, certBytes);
 
-        TempData["Mensaje"] = "Certificado digital .pfx instalado y validado exitosamente.";
+        // La contraseña del certificado nunca se persiste: debe definirse en configuración
+        // (user-secrets o variable de entorno) y coincidir con la usada al instalarlo.
+        TempData["Mensaje"] = $"Certificado digital .pfx instalado y validado en '{destPath}'. " +
+            "Defina Certificado:Password por user-secrets o variable de entorno para firmar los comprobantes.";
         return RedirectToAction(nameof(Certificado));
     }
 
     [HttpPost]
+    [Authorize(Policy = Politicas.CambioAmbiente)]
     public IActionResult CambiarAmbiente(string ambiente)
     {
         if (ambiente == "Produccion")
@@ -140,6 +153,7 @@ public class ConfiguracionController : Controller
     }
 
     [HttpPost]
+    [Authorize(Policy = Politicas.CambioAmbiente)]
     public async Task<IActionResult> ProbarConectividad()
     {
         var sw = Stopwatch.StartNew();
@@ -262,5 +276,42 @@ public class ConfiguracionController : Controller
         }
 
         return RedirectToAction(nameof(FacturaFisica));
+    }
+
+    /// <summary>
+    /// Directorio de datos local del POS (certificado digital y otros archivos sensibles).
+    /// Por defecto queda en %LOCALAPPDATA%\PosPalasy\certificados, nunca dentro del directorio
+    /// de la aplicación ni del contenido web servido.
+    /// </summary>
+    private string ObtenerDirectorioDatos()
+    {
+        var configurado = _configuration["Certificado:DirectorioDatos"];
+
+        var directorio = !string.IsNullOrWhiteSpace(configurado)
+            ? configurado
+            : Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "PosPalasy",
+                "certificados");
+
+        return Path.GetFullPath(directorio);
+    }
+
+    /// <summary>
+    /// Ruta efectiva del certificado. Una ruta absoluta en configuración se respeta;
+    /// cualquier otra se resuelve dentro del directorio de datos local.
+    /// </summary>
+    private string ObtenerRutaCertificado()
+    {
+        var configurada = _configuration["Certificado:RutaCertificado"];
+
+        if (!string.IsNullOrWhiteSpace(configurada) && Path.IsPathRooted(configurada))
+            return Path.GetFullPath(configurada);
+
+        var nombreArchivo = string.IsNullOrWhiteSpace(configurada)
+            ? "emisor.pfx"
+            : Path.GetFileName(configurada);
+
+        return Path.Combine(ObtenerDirectorioDatos(), nombreArchivo);
     }
 }

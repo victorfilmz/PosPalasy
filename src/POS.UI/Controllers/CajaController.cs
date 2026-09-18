@@ -1,13 +1,19 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using POS.Domain.Entities;
 using POS.Domain.Enums;
 using POS.Domain.Repositories;
+using POS.UI.Security;
 
 namespace POS.UI.Controllers;
 
+/// <summary>
+/// Control de turnos de caja: apertura, movimientos, cortes X/Z y cierre con arqueo.
+/// </summary>
+[Authorize(Policy = Politicas.OperacionPos)]
 public class CajaController : Controller
 {
     private readonly ICajaTurnoRepository _cajaRepo;

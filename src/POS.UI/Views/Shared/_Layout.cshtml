@@ -1,3 +1,13 @@
+@using POS.Domain.Enums
+@{
+    var esAutenticado = User?.Identity?.IsAuthenticated == true;
+    var puedeConfigurar = User!.IsInRole(Roles.SuperAdmin) || User.IsInRole(Roles.Administrador);
+    var puedeSupervisar = puedeConfigurar || User.IsInRole(Roles.Supervisor);
+    var puedeVerReportes = puedeSupervisar || User.IsInRole(Roles.Contador);
+    var nombreVisible = User.FindFirst(System.Security.Claims.ClaimTypes.GivenName)?.Value
+        ?? User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value
+        ?? "";
+}
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -58,14 +68,17 @@
                     <i class="bi bi-receipt"></i>
                     <span class="link-text">Comprobantes e-CF</span>
                 </a>
-                <a asp-controller="Facturacion" asp-action="Emitir" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Facturacion" && ViewContext.RouteData.Values["action"]?.ToString() == "Emitir" ? "active" : "")" title="Emisión Manual">
-                    <i class="bi bi-file-earmark-plus"></i>
-                    <span class="link-text">Emisión Manual B01/B02</span>
-                </a>
-                <a asp-controller="Facturacion" asp-action="Anulaciones" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Facturacion" && ViewContext.RouteData.Values["action"]?.ToString() == "Anulaciones" ? "active" : "")" title="Anulaciones ANECF">
-                    <i class="bi bi-shield-slash"></i>
-                    <span class="link-text">Anulaciones (ANECF)</span>
-                </a>
+                @if (puedeSupervisar)
+                {
+                    <a asp-controller="Facturacion" asp-action="Emitir" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Facturacion" && ViewContext.RouteData.Values["action"]?.ToString() == "Emitir" ? "active" : "")" title="Emisión Manual">
+                        <i class="bi bi-file-earmark-plus"></i>
+                        <span class="link-text">Emisión Manual B01/B02</span>
+                    </a>
+                    <a asp-controller="Facturacion" asp-action="Anulaciones" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Facturacion" && ViewContext.RouteData.Values["action"]?.ToString() == "Anulaciones" ? "active" : "")" title="Anulaciones ANECF">
+                        <i class="bi bi-shield-slash"></i>
+                        <span class="link-text">Anulaciones (ANECF)</span>
+                    </a>
+                }
 
                 <!-- Grupo 4: Reportes Fiscales y Métricas -->
                 <div class="nav-group-title">Contabilidad y DGII</div>
@@ -73,29 +86,35 @@
                     <i class="bi bi-speedometer2"></i>
                     <span class="link-text">Dashboard Métricas</span>
                 </a>
-                <a asp-controller="Reportes" asp-action="Ventas607" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Reportes" && ViewContext.RouteData.Values["action"]?.ToString() == "Ventas607" ? "active" : "")" title="Libro de Ventas 607">
-                    <i class="bi bi-file-earmark-spreadsheet"></i>
-                    <span class="link-text">Libro Ventas 607</span>
-                </a>
-                <a asp-controller="Reportes" asp-action="ResumenItbis" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Reportes" && ViewContext.RouteData.Values["action"]?.ToString() == "ResumenItbis" ? "active" : "")" title="Resumen IT-1 (ITBIS)">
-                    <i class="bi bi-calculator"></i>
-                    <span class="link-text">Resumen IT-1</span>
-                </a>
+                @if (puedeVerReportes)
+                {
+                    <a asp-controller="Reportes" asp-action="Ventas607" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Reportes" && ViewContext.RouteData.Values["action"]?.ToString() == "Ventas607" ? "active" : "")" title="Libro de Ventas 607">
+                        <i class="bi bi-file-earmark-spreadsheet"></i>
+                        <span class="link-text">Libro Ventas 607</span>
+                    </a>
+                    <a asp-controller="Reportes" asp-action="ResumenItbis" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Reportes" && ViewContext.RouteData.Values["action"]?.ToString() == "ResumenItbis" ? "active" : "")" title="Resumen IT-1 (ITBIS)">
+                        <i class="bi bi-calculator"></i>
+                        <span class="link-text">Resumen IT-1</span>
+                    </a>
+                }
 
                 <!-- Grupo 5: Configuración -->
-                <div class="nav-group-title">Configuración y Sistema</div>
-                <a asp-controller="Configuracion" asp-action="Empresa" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Configuracion" && ViewContext.RouteData.Values["action"]?.ToString() == "Empresa" ? "active" : "")" title="Datos de la Empresa">
-                    <i class="bi bi-building"></i>
-                    <span class="link-text">Datos de la Empresa</span>
-                </a>
-                <a asp-controller="Configuracion" asp-action="FacturaFisica" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Configuracion" && ViewContext.RouteData.Values["action"]?.ToString() == "FacturaFisica" ? "active" : "")" title="Diseño de Factura Física">
-                    <i class="bi bi-printer"></i>
-                    <span class="link-text">Factura Física / Ticket</span>
-                </a>
-                <a asp-controller="Configuracion" asp-action="Certificado" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Configuracion" && ViewContext.RouteData.Values["action"]?.ToString() == "Certificado" ? "active" : "")" title="Certificado Digital DGII">
-                    <i class="bi bi-shield-lock"></i>
-                    <span class="link-text">Certificado Digital DGII</span>
-                </a>
+                @if (puedeConfigurar)
+                {
+                    <div class="nav-group-title">Configuración y Sistema</div>
+                    <a asp-controller="Configuracion" asp-action="Empresa" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Configuracion" && ViewContext.RouteData.Values["action"]?.ToString() == "Empresa" ? "active" : "")" title="Datos de la Empresa">
+                        <i class="bi bi-building"></i>
+                        <span class="link-text">Datos de la Empresa</span>
+                    </a>
+                    <a asp-controller="Configuracion" asp-action="FacturaFisica" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Configuracion" && ViewContext.RouteData.Values["action"]?.ToString() == "FacturaFisica" ? "active" : "")" title="Diseño de Factura Física">
+                        <i class="bi bi-printer"></i>
+                        <span class="link-text">Factura Física / Ticket</span>
+                    </a>
+                    <a asp-controller="Configuracion" asp-action="Certificado" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Configuracion" && ViewContext.RouteData.Values["action"]?.ToString() == "Certificado" ? "active" : "")" title="Certificado Digital DGII">
+                        <i class="bi bi-shield-lock"></i>
+                        <span class="link-text">Certificado Digital DGII</span>
+                    </a>
+                }
             </div>
 
             <div class="sidebar-footer">
@@ -125,12 +144,23 @@
                         <span>DGII En Línea <span class="d-none d-sm-inline">(TestECF)</span></span>
                     </div>
 
-                    <!-- Badge de Cajero / Turno -->
-                    <div class="caja-shift-pill d-none d-md-flex align-items-center">
-                        <i class="bi bi-person-badge text-primary fs-6"></i>
-                        <span>Caja Principal</span>
-                        <span class="badge bg-success-subtle text-success border border-success-subtle ms-1" style="font-size: 0.7rem;">Turno Activo</span>
-                    </div>
+                    <!-- Usuario en sesión y cierre de sesión -->
+                    @if (esAutenticado)
+                    {
+                        <div class="caja-shift-pill d-none d-md-flex align-items-center">
+                            <i class="bi bi-person-badge text-primary fs-6"></i>
+                            <span>@nombreVisible</span>
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle ms-1" style="font-size: 0.7rem;">
+                                @(User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value)
+                            </span>
+                        </div>
+                        <form asp-controller="Cuenta" asp-action="Logout" method="post" class="d-inline ms-2">
+                            <button type="submit" class="btn btn-sm btn-outline-secondary fw-semibold" title="Cerrar sesión">
+                                <i class="bi bi-box-arrow-right"></i>
+                                <span class="d-none d-lg-inline ms-1">Salir</span>
+                            </button>
+                        </form>
+                    }
                 </div>
             </header>
 
