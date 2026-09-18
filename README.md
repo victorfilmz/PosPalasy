@@ -60,6 +60,23 @@ log de arranque y **obliga a cambiarla en el primer acceso**.
 
 Detalle completo de roles, matriz de permisos y pruebas: [`documentacion/06_Seguridad_Matriz_Permisos.md`](documentacion/06_Seguridad_Matriz_Permisos.md).
 
+## Venta transaccional
+
+El registro de una venta es un caso de uso de `POS.Application` (`ProcesarVentaHandler`), no lógica de
+controlador. Todo lo que ocurre en una venta es **una sola transacción** de base de datos:
+
+- el precio, el ITBIS, la unidad de medida y la descripción los resuelve el **servidor** desde el catálogo;
+- la numeración fiscal (eNCF) se asigna dentro de la transacción y está protegida por índice único, con
+  reintento ante carrera;
+- existencias, kardex, acumulado de caja, comprobante y cola de emisión se confirman o se revierten juntos;
+- la transmisión a la DGII ocurre **fuera** de la transacción: un fallo de red no revierte una venta ya
+  cobrada ni se reporta como comprobante aceptado;
+- cada intento lleva una clave de idempotencia: doble clic, doble POST, recarga o reintento no producen
+  dos ventas, dos movimientos de inventario, dos movimientos de caja ni dos e-CF.
+
+Flujo completo, máquina de estados, idempotencia y matriz de escenarios:
+[`documentacion/07_Flujo_Venta_Transaccional.md`](documentacion/07_Flujo_Venta_Transaccional.md).
+
 ## Pruebas
 
 ```bash
@@ -67,8 +84,11 @@ dotnet test PosPalasy.slnx
 ```
 
 - `tests/POS.Domain.Types.Tests` — dominio, tipos DGII, cálculos y flujos del POS.
+- `tests/POS.Ventas.Tests` — caso de uso de venta contra base de datos real: atomicidad, inventario,
+  caja, numeración fiscal, idempotencia y fallos inyectados.
 - `tests/POS.UI.SecurityTests` — seguridad de extremo a extremo sobre el pipeline HTTP real
-  (autenticación, autorización por rol, antiforgery, cuentas y matriz de permisos).
+  (autenticación, autorización por rol, antiforgery, cuentas, matriz de permisos) y venta de extremo a
+  extremo por HTTP.
 
 ## Documentación
 

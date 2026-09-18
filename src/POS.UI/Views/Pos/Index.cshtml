@@ -385,6 +385,9 @@
 
     // Estado en Memoria del Carrito
     let carrito = [];
+    // Clave de idempotencia del intento de venta: se genera una sola vez por carrito y se reenvía
+    // idéntica en cada reintento, para que un doble clic o una recarga no produzcan dos ventas.
+    let claveVenta = generarClaveVenta();
     let modalCobroInstancia = null;
     let modalExitoInstancia = null;
     let tipoComprobanteActivo = 32;
@@ -595,8 +598,21 @@
     function confirmarLimpiarCarrito() {
         if (confirm("¿Desea vaciar el ticket de venta actual?")) {
             carrito = [];
+            claveVenta = generarClaveVenta();
             renderizarCarrito();
         }
+    }
+
+    // Identificador del intento de venta actual (UUID v4 del navegador).
+    function generarClaveVenta() {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+            return window.crypto.randomUUID();
+        }
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            const r = Math.random() * 16 | 0;
+            const v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
     }
 
     function renderizarCarrito() {
@@ -823,6 +839,7 @@
         icono.classList.add('d-none');
 
         const payload = {
+            claveIdempotencia: claveVenta,
             tipoeCF: tipoComp,
             tipoPago: tipoPago,
             metodoPago: finalMetodoPago,
@@ -830,14 +847,12 @@
             rncComprador: rnc || null,
             razonSocialComprador: nombre || (tipoComp === 32 ? "Consumidor Final" : null),
             montoRecibido: metodoPago === 99 ? total : recibido,
+            // Solo lo que decide el cajero: producto, cantidad y descuento. El precio, el ITBIS y la
+            // unidad de medida los resuelve el servidor desde el catálogo.
             items: carrito.map(item => ({
                 productoId: item.productoId,
-                descripcion: item.descripcion,
                 cantidad: item.cantidad,
-                precioUnitario: item.precioUnitario,
-                descuento: item.descuento,
-                indicadorFacturacion: item.indicadorFacturacion,
-                unidadMedida: item.unidadMedida
+                descuento: item.descuento
             }))
         };
 
@@ -855,7 +870,18 @@
             const result = await resp.json();
 
             if (!resp.ok || !result.exitoso) {
-                throw new Error(result.mensaje || "Error al procesar la venta en la DGII.");
+                // El servidor devuelve un código estable: la interfaz reacciona sin depender del texto.
+                if (result.codigoError === 'SIN_TURNO_DE_CAJA') {
+                    alerta.innerText = "Debe abrir su turno de caja antes de cobrar. Use el módulo de Caja.";
+                    alerta.classList.remove('d-none');
+                    return;
+                }
+                if (result.codigoError === 'STOCK_INSUFICIENTE') {
+                    alerta.innerText = result.mensaje;
+                    alerta.classList.remove('d-none');
+                    return;
+                }
+                throw new Error(result.mensaje || "No fue posible registrar la venta.");
             }
 
             modalCobroInstancia.hide();
@@ -897,6 +923,8 @@
 
     function reiniciarVenta() {
         carrito = [];
+        // Venta confirmada: el siguiente cobro es un intento nuevo con su propia clave.
+        claveVenta = generarClaveVenta();
         renderizarCarrito();
         document.getElementById('rncClienteInput').value = '';
         document.getElementById('nombreClienteInput').value = 'Consumidor Final';

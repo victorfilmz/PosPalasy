@@ -250,6 +250,127 @@ END
             logger?.LogWarning(ex, "No se pudo aplicar el DDL de control (Caja/Sucursal/Inventario) sobre la base existente.");
         }
 
+        // Integridad transaccional, idempotencia y numeración fiscal:
+        // columnas y tabla nuevas sobre bases ya existentes creadas con EnsureCreated.
+        try
+        {
+            // Se aplica en tres lotes porque SQL Server compila el lote completo antes de ejecutarlo:
+            // una sentencia que use una columna añadida en el mismo lote falla al compilarse.
+            // Lote 1: tabla nueva.
+            var integridadTablasSql = @"
+-- Secuencias fiscales (eNCF) autorizadas
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'SecuenciasECF')
+BEGIN
+    CREATE TABLE [SecuenciasECF] (
+        [Id] int NOT NULL IDENTITY,
+        [Serie] nvarchar(3) NOT NULL,
+        [TipoECF] int NOT NULL,
+        [Ultimo] bigint NOT NULL DEFAULT 0,
+        [DesdeAutorizado] bigint NULL,
+        [HastaAutorizado] bigint NULL,
+        [Version] uniqueidentifier NOT NULL,
+        [FechaActualizacion] datetime2 NOT NULL,
+        [CreatedAt] datetime2 NOT NULL DEFAULT (GETUTCDATE()),
+        [UpdatedAt] datetime2 NULL,
+        CONSTRAINT [PK_SecuenciasECF] PRIMARY KEY ([Id])
+    );
+    CREATE UNIQUE INDEX [IX_SecuenciasECF_Serie] ON [SecuenciasECF] ([Serie]);
+END
+";
+            await context.Database.ExecuteSqlRawAsync(integridadTablasSql);
+
+            // Lote 2: columnas nuevas sobre tablas existentes.
+            var integridadColumnasSql = @"
+-- Idempotencia y trazabilidad de ventas
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[Ventas]') AND name = 'ClaveIdempotencia')
+    ALTER TABLE [Ventas] ADD [ClaveIdempotencia] uniqueidentifier NULL;
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[Ventas]') AND name = 'Usuario')
+    ALTER TABLE [Ventas] ADD [Usuario] nvarchar(100) NULL;
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[Ventas]') AND name = 'MontoRecibido')
+    ALTER TABLE [Ventas] ADD [MontoRecibido] decimal(18,2) NOT NULL DEFAULT 0;
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[Ventas]') AND name = 'Cambio')
+    ALTER TABLE [Ventas] ADD [Cambio] decimal(18,2) NOT NULL DEFAULT 0;
+
+-- Instantánea fiscal del renglón
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[VentaItems]') AND name = 'CodigoProducto')
+    ALTER TABLE [VentaItems] ADD [CodigoProducto] nvarchar(50) NULL;
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[VentaItems]') AND name = 'UnidadMedida')
+    ALTER TABLE [VentaItems] ADD [UnidadMedida] int NOT NULL DEFAULT 1;
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[VentaItems]') AND name = 'IndicadorBienoServicio')
+    ALTER TABLE [VentaItems] ADD [IndicadorBienoServicio] int NOT NULL DEFAULT 1;
+
+-- Responsable del turno de caja
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[CajaTurnos]') AND name = 'UsuarioId')
+    ALTER TABLE [CajaTurnos] ADD [UsuarioId] int NULL;
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[CajaTurnos]') AND name = 'UsuarioNombre')
+    ALTER TABLE [CajaTurnos] ADD [UsuarioNombre] nvarchar(100) NULL;
+
+-- Estado técnico de emisión del comprobante
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[ElectronicInvoices]') AND name = 'EstadoEmision')
+    ALTER TABLE [ElectronicInvoices] ADD [EstadoEmision] int NOT NULL DEFAULT 0;
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[ElectronicInvoices]') AND name = 'FechaUltimoIntentoEnvio')
+    ALTER TABLE [ElectronicInvoices] ADD [FechaUltimoIntentoEnvio] datetime2 NULL;
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[ElectronicInvoices]') AND name = 'UltimoCodigoHttp')
+    ALTER TABLE [ElectronicInvoices] ADD [UltimoCodigoHttp] int NULL;
+
+-- Lease y espera progresiva de la cola DGII
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[EmisionesDGIIQueue]') AND name = 'Estado')
+    ALTER TABLE [EmisionesDGIIQueue] ADD [Estado] int NOT NULL DEFAULT 0;
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[EmisionesDGIIQueue]') AND name = 'ProximoIntentoUtc')
+    ALTER TABLE [EmisionesDGIIQueue] ADD [ProximoIntentoUtc] datetime2 NULL;
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[EmisionesDGIIQueue]') AND name = 'LeaseToken')
+    ALTER TABLE [EmisionesDGIIQueue] ADD [LeaseToken] nvarchar(100) NULL;
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[EmisionesDGIIQueue]') AND name = 'LeaseHastaUtc')
+    ALTER TABLE [EmisionesDGIIQueue] ADD [LeaseHastaUtc] datetime2 NULL;
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[EmisionesDGIIQueue]') AND name = 'TrackId')
+    ALTER TABLE [EmisionesDGIIQueue] ADD [TrackId] nvarchar(100) NULL;
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[EmisionesDGIIQueue]') AND name = 'UltimoCodigoHttp')
+    ALTER TABLE [EmisionesDGIIQueue] ADD [UltimoCodigoHttp] int NULL;
+";
+            await context.Database.ExecuteSqlRawAsync(integridadColumnasSql);
+
+            // Lote 3: relleno de datos y objetos que usan columnas creadas en el lote anterior.
+            var integridadRellenoSql = @"
+-- Semilla: series E31 (crédito fiscal) y E32 (consumo), sin límite de rango configurado.
+IF EXISTS (SELECT * FROM sys.tables WHERE name = 'SecuenciasECF')
+    AND NOT EXISTS (SELECT 1 FROM [SecuenciasECF] WHERE [Serie] = 'E31')
+    INSERT INTO [SecuenciasECF] ([Serie],[TipoECF],[Ultimo],[DesdeAutorizado],[HastaAutorizado],[Version],[FechaActualizacion])
+    VALUES ('E31', 31, 0, 1, NULL, NEWID(), GETUTCDATE());
+IF EXISTS (SELECT * FROM sys.tables WHERE name = 'SecuenciasECF')
+    AND NOT EXISTS (SELECT 1 FROM [SecuenciasECF] WHERE [Serie] = 'E32')
+    INSERT INTO [SecuenciasECF] ([Serie],[TipoECF],[Ultimo],[DesdeAutorizado],[HastaAutorizado],[Version],[FechaActualizacion])
+    VALUES ('E32', 32, 0, 1, NULL, NEWID(), GETUTCDATE());
+
+-- Ventas existentes: clave de idempotencia única y obligatoria.
+IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[Ventas]') AND name = 'ClaveIdempotencia')
+BEGIN
+    UPDATE [Ventas] SET [ClaveIdempotencia] = NEWID() WHERE [ClaveIdempotencia] IS NULL;
+    ALTER TABLE [Ventas] ALTER COLUMN [ClaveIdempotencia] uniqueidentifier NOT NULL;
+END
+IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[Ventas]') AND name = 'ClaveIdempotencia')
+    AND NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_Ventas_ClaveIdempotencia' AND object_id = OBJECT_ID(N'[Ventas]'))
+    CREATE UNIQUE INDEX [IX_Ventas_ClaveIdempotencia] ON [Ventas] ([ClaveIdempotencia]);
+
+IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[CajaTurnos]') AND name = 'UsuarioId')
+    AND NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_CajaTurnos_UsuarioId_Estado' AND object_id = OBJECT_ID(N'[CajaTurnos]'))
+    CREATE INDEX [IX_CajaTurnos_UsuarioId_Estado] ON [CajaTurnos] ([UsuarioId], [Estado]);
+
+-- Los comprobantes ya transmitidos antes de este cambio quedan en envio confirmado (6).
+IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[ElectronicInvoices]') AND name = 'EstadoEmision')
+    UPDATE [ElectronicInvoices] SET [EstadoEmision] = 6 WHERE [TrackId] IS NOT NULL AND [EstadoEmision] = 0;
+
+IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[EmisionesDGIIQueue]') AND name = 'Estado')
+    AND NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_EmisionesDGIIQueue_EnviadoExitosamente_Estado_ProximoIntentoUtc' AND object_id = OBJECT_ID(N'[EmisionesDGIIQueue]'))
+    CREATE INDEX [IX_EmisionesDGIIQueue_EnviadoExitosamente_Estado_ProximoIntentoUtc]
+        ON [EmisionesDGIIQueue] ([EnviadoExitosamente], [Estado], [ProximoIntentoUtc]);
+";
+            await context.Database.ExecuteSqlRawAsync(integridadRellenoSql);
+        }
+        catch (Exception ex)
+        {
+            logger?.LogWarning(ex, "No se pudo aplicar el DDL de integridad (secuencias, idempotencia y cola) sobre la base existente.");
+        }
+
         // Control de seguridad: tabla de usuarios para bases ya existentes creadas con EnsureCreated.
         try
         {

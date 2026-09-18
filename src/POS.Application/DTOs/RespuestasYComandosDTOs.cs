@@ -21,6 +21,16 @@ public class ElectronicInvoiceResponse
     public string eNCF { get; set; } = string.Empty;
     public string? TrackId { get; set; }
     public EstadoFacturaElectronica Estado { get; set; } = EstadoFacturaElectronica.EnProceso;
+
+    /// <summary>Estado técnico local del comprobante (creado, validado, firmado, encolado, error…).</summary>
+    public EstadoEmisionECF EstadoEmision { get; set; } = EstadoEmisionECF.Creada;
+
+    /// <summary>Código HTTP devuelto por la DGII; null cuando no hubo respuesta alguna.</summary>
+    public int? CodigoHttp { get; set; }
+
+    /// <summary>Indica si el fallo admite reintento automático o exige intervención humana.</summary>
+    public bool EsRecuperable { get; set; }
+
     public string? CodigoSeguridadeCF { get; set; }
     public string? Mensaje { get; set; }
     public DateTime FechaRecepcion { get; set; } = DateTime.UtcNow;

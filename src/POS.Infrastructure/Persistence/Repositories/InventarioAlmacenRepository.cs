@@ -1,8 +1,10 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using POS.Domain.Common;
 using POS.Domain.Entities;
 using POS.Domain.Repositories;
 
@@ -51,6 +53,69 @@ public class InventarioAlmacenRepository : IInventarioAlmacenRepository
             .OrderBy(i => i.SucursalId)
             .ThenBy(i => i.Producto != null ? i.Producto.Descripcion : "")
             .ToListAsync(ct);
+    }
+
+    public async Task<ResultadoDescuentoStock> DescontarStockAsync(
+        int productoId,
+        int sucursalId,
+        decimal cantidad,
+        bool permitirStockNegativo,
+        CancellationToken ct = default)
+    {
+        if (cantidad <= 0)
+            throw new ReglaDeNegocioException(
+                "La cantidad a descontar debe ser mayor que cero.",
+                "CANTIDAD_INVALIDA");
+
+        // Una única sentencia condicional: la comprobación y el descuento son la misma operación,
+        // por lo que dos ventas simultáneas de la última unidad no pueden pasar ambas el control.
+        var consulta = _context.InventariosAlmacen
+            .Where(i => i.ProductoId == productoId && i.SucursalId == sucursalId);
+
+        if (!permitirStockNegativo)
+            consulta = consulta.Where(i => i.StockActual >= cantidad);
+
+        var filas = await consulta.ExecuteUpdateAsync(setters => setters
+            .SetProperty(i => i.StockActual, i => i.StockActual - cantidad)
+            .SetProperty(i => i.UpdatedAt, _ => DateTime.UtcNow), ct);
+
+        if (filas == 0)
+        {
+            var existenciaRegistrada = await _context.InventariosAlmacen
+                .AnyAsync(i => i.ProductoId == productoId && i.SucursalId == sucursalId, ct);
+
+            if (!permitirStockNegativo)
+            {
+                var stockActual = existenciaRegistrada
+                    ? await _context.InventariosAlmacen
+                        .Where(i => i.ProductoId == productoId && i.SucursalId == sucursalId)
+                        .Select(i => i.StockActual)
+                        .FirstAsync(ct)
+                    : 0m;
+
+                return new ResultadoDescuentoStock(false, stockActual, existenciaRegistrada);
+            }
+
+            // Política permisiva: se admite vender sin existencias registradas; se crea la fila.
+            await _context.InventariosAlmacen.AddAsync(new InventarioAlmacen
+            {
+                ProductoId = productoId,
+                SucursalId = sucursalId,
+                StockActual = -cantidad,
+                StockMinimo = 5m
+            }, ct);
+            await _context.SaveChangesAsync(ct);
+
+            return new ResultadoDescuentoStock(true, -cantidad, false);
+        }
+
+        var resultante = await _context.InventariosAlmacen
+            .AsNoTracking()
+            .Where(i => i.ProductoId == productoId && i.SucursalId == sucursalId)
+            .Select(i => i.StockActual)
+            .FirstAsync(ct);
+
+        return new ResultadoDescuentoStock(true, resultante, true);
     }
 
     public async Task<decimal> GetStockAsync(int productoId, int sucursalId, CancellationToken ct = default)

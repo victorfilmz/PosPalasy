@@ -25,6 +25,7 @@ public class POSDbContext : DbContext
     public DbSet<PagoFactura> PagosFactura => Set<PagoFactura>();
     public DbSet<EmisionDGIIQueue> EmisionesDGIIQueue => Set<EmisionDGIIQueue>();
     public DbSet<Usuario> Usuarios => Set<Usuario>();
+    public DbSet<SecuenciaECF> SecuenciasECF => Set<SecuenciaECF>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -39,6 +40,16 @@ public class POSDbContext : DbContext
             b.Property(u => u.PasswordHash).HasMaxLength(500).IsRequired();
             b.Property(u => u.Rol).HasConversion<int>();
             b.HasIndex(u => u.NombreUsuario).IsUnique();
+        });
+
+        // SecuenciaECF (numeración fiscal autorizada)
+        modelBuilder.Entity<SecuenciaECF>(b =>
+        {
+            b.HasKey(s => s.Id);
+            b.Property(s => s.Serie).HasMaxLength(3).IsRequired();
+            b.Property(s => s.TipoECF).HasConversion<int>();
+            b.Property(s => s.Version).IsConcurrencyToken();
+            b.HasIndex(s => s.Serie).IsUnique();
         });
 
         // Enterprise
@@ -141,8 +152,13 @@ public class POSDbContext : DbContext
             b.Property(q => q.eNCF).HasMaxLength(20).IsRequired();
             b.Property(q => q.XmlFirmado).IsRequired();
             b.Property(q => q.UltimoError).HasMaxLength(500);
+            b.Property(q => q.Estado).HasConversion<int>();
+            b.Property(q => q.LeaseToken).HasMaxLength(100);
+            b.Property(q => q.TrackId).HasMaxLength(100);
             b.HasIndex(q => q.FacturaId);
             b.HasIndex(q => q.EnviadoExitosamente);
+            // Índice de elegibilidad: el trabajador busca pendientes por estado y ventana de reintento.
+            b.HasIndex(q => new { q.EnviadoExitosamente, q.Estado, q.ProximoIntentoUtc });
         });
 
         // MovimientoInventario
@@ -179,11 +195,17 @@ public class POSDbContext : DbContext
         {
             b.HasKey(v => v.Id);
             b.Property(v => v.NumeroFacturaInterna).HasMaxLength(50).IsRequired();
+            b.Property(v => v.Usuario).HasMaxLength(100);
             b.Property(v => v.Subtotal).HasPrecision(18, 2);
             b.Property(v => v.TotalDescuento).HasPrecision(18, 2);
             b.Property(v => v.TotalITBIS).HasPrecision(18, 2);
             b.Property(v => v.TotalISC).HasPrecision(18, 2);
             b.Property(v => v.Total).HasPrecision(18, 2);
+            b.Property(v => v.MontoRecibido).HasPrecision(18, 2);
+            b.Property(v => v.Cambio).HasPrecision(18, 2);
+
+            // Barrera de idempotencia: una misma solicitud no puede producir dos ventas.
+            b.HasIndex(v => v.ClaveIdempotencia).IsUnique();
 
             b.HasOne(v => v.Enterprise)
                 .WithMany()
@@ -200,7 +222,10 @@ public class POSDbContext : DbContext
         modelBuilder.Entity<VentaItem>(b =>
         {
             b.HasKey(vi => vi.Id);
+            b.Property(vi => vi.CodigoProducto).HasMaxLength(50);
             b.Property(vi => vi.Descripcion).HasMaxLength(200).IsRequired();
+            b.Property(vi => vi.UnidadMedida).HasConversion<int>();
+            b.Property(vi => vi.IndicadorBienoServicio).HasConversion<int>();
             b.Property(vi => vi.Cantidad).HasPrecision(18, 2);
             b.Property(vi => vi.PrecioUnitario).HasPrecision(18, 4);
             b.Property(vi => vi.Descuento).HasPrecision(18, 2);
@@ -225,6 +250,7 @@ public class POSDbContext : DbContext
             b.Property(ei => ei.RNCComprador).HasMaxLength(11);
             b.Property(ei => ei.XMLHash).HasMaxLength(6).IsRequired();
             b.Property(ei => ei.TrackId).HasMaxLength(100);
+            b.Property(ei => ei.EstadoEmision).HasConversion<int>();
 
             // Montos y bases
             b.Property(ei => ei.MontoGravadoTotal).HasPrecision(18, 2);
@@ -284,6 +310,9 @@ public class POSDbContext : DbContext
         {
             b.HasKey(c => c.Id);
             b.Property(c => c.Cajero).HasMaxLength(100).IsRequired();
+            b.Property(c => c.UsuarioNombre).HasMaxLength(100);
+            // Un usuario no puede tener dos turnos abiertos a la vez.
+            b.HasIndex(c => new { c.UsuarioId, c.Estado });
             b.Property(c => c.MontoInicial).HasPrecision(18, 2);
             b.Property(c => c.VentasEfectivo).HasPrecision(18, 2);
             b.Property(c => c.VentasTarjeta).HasPrecision(18, 2);

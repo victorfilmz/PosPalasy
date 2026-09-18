@@ -30,7 +30,7 @@ public class CajaController : Controller
     [HttpGet]
     public async Task<IActionResult> Index()
     {
-        var turnoActivo = await _cajaRepo.GetTurnoActivoAsync();
+        var turnoActivo = await ObtenerTurnoDelUsuarioAsync();
         var historial = await _cajaRepo.GetAllAsync();
         var enterprise = await _enterpriseRepo.GetDefaultAsync();
 
@@ -42,23 +42,24 @@ public class CajaController : Controller
     [HttpGet]
     public async Task<IActionResult> Apertura()
     {
-        var turnoActivo = await _cajaRepo.GetTurnoActivoAsync();
+        var turnoActivo = await ObtenerTurnoDelUsuarioAsync();
         if (turnoActivo != null)
         {
-            TempData["Mensaje"] = "Ya existe un turno de caja abierto actualmente.";
+            TempData["Mensaje"] = "Ya tiene un turno de caja abierto.";
             return RedirectToAction(nameof(Index));
         }
 
+        ViewBag.NombreSugerido = SesionUsuario.ObtenerNombreCompleto(User);
         return View();
     }
 
     [HttpPost]
     public async Task<IActionResult> Apertura(string cajero, decimal montoInicial)
     {
-        var turnoActivo = await _cajaRepo.GetTurnoActivoAsync();
+        var turnoActivo = await ObtenerTurnoDelUsuarioAsync();
         if (turnoActivo != null)
         {
-            TempData["Error"] = "Ya existe un turno de caja abierto.";
+            TempData["Error"] = "Ya tiene un turno de caja abierto.";
             return RedirectToAction(nameof(Index));
         }
 
@@ -68,9 +69,18 @@ public class CajaController : Controller
             return View();
         }
 
+        var (sucursalId, _) = await ResolverSucursalAsync();
+        var nombreCompleto = SesionUsuario.ObtenerNombreCompleto(User);
+
         var nuevoTurno = new CajaTurno
         {
-            Cajero = string.IsNullOrWhiteSpace(cajero) ? "Cajero Principal" : cajero.Trim(),
+            SucursalId = sucursalId,
+            // El responsable fiable del turno es el usuario autenticado, no el texto del formulario.
+            UsuarioId = SesionUsuario.ObtenerUsuarioId(User),
+            UsuarioNombre = SesionUsuario.ObtenerNombre(User),
+            Cajero = string.IsNullOrWhiteSpace(cajero)
+                ? (string.IsNullOrWhiteSpace(nombreCompleto) ? "Cajero Principal" : nombreCompleto)
+                : cajero.Trim(),
             FechaApertura = DateTime.UtcNow,
             MontoInicial = montoInicial,
             Estado = TurnoCajaEstado.Abierto
@@ -84,7 +94,7 @@ public class CajaController : Controller
     [HttpGet]
     public async Task<IActionResult> Cierre()
     {
-        var turnoActivo = await _cajaRepo.GetTurnoActivoAsync();
+        var turnoActivo = await ObtenerTurnoDelUsuarioAsync();
         if (turnoActivo == null)
         {
             TempData["Error"] = "No hay ningún turno de caja abierto para cerrar.";
@@ -97,24 +107,18 @@ public class CajaController : Controller
     [HttpPost]
     public async Task<IActionResult> Cierre(int id, decimal montoRealCierre, string? observaciones)
     {
-        var turno = await _cajaRepo.GetByIdAsync(id);
-        if (turno == null || turno.Estado != TurnoCajaEstado.Abierto)
+        // El cierre es atómico: el efectivo esperado y la diferencia se calculan en la base de datos
+        // y solo el primer cierre del turno se aplica (un segundo intento no altera el arqueo).
+        var filas = await _cajaRepo.CerrarTurnoAsync(id, montoRealCierre, observaciones);
+
+        if (filas == 0)
         {
             TempData["Error"] = "El turno especificado no está abierto o no existe.";
             return RedirectToAction(nameof(Index));
         }
 
-        var diferencia = montoRealCierre - turno.EfectivoEsperado;
-
-        turno.MontoRealCierre = montoRealCierre;
-        turno.Diferencia = diferencia;
-        turno.FechaCierre = DateTime.UtcNow;
-        turno.Estado = TurnoCajaEstado.Cerrado;
-        turno.Observaciones = observaciones;
-
-        await _cajaRepo.UpdateAsync(turno);
-        TempData["Mensaje"] = $"Turno #{turno.Id} cerrado correctamente. Arqueo completado.";
-        return RedirectToAction(nameof(ReporteZ), new { id = turno.Id });
+        TempData["Mensaje"] = $"Turno #{id} cerrado correctamente. Arqueo completado.";
+        return RedirectToAction(nameof(ReporteZ), new { id });
     }
 
     [HttpGet]
@@ -184,15 +188,32 @@ public class CajaController : Controller
             Fecha = DateTime.UtcNow
         };
 
-        if (tipo == TipoMovimientoCaja.Entrada)
-            turno.TotalEntradasEfectivo += monto;
-        else
-            turno.TotalSalidasEfectivo += monto;
-
-        await _cajaRepo.AddMovimientoAsync(movimiento);
-        await _cajaRepo.UpdateAsync(turno);
+        try
+        {
+            await _cajaRepo.RegistrarMovimientoAsync(movimiento);
+        }
+        catch (POS.Domain.Common.ReglaDeNegocioException ex)
+        {
+            TempData["Error"] = ex.Message;
+            return RedirectToAction(nameof(Index));
+        }
 
         TempData["Mensaje"] = $"Movimiento de {tipo} por RD$ {monto:N2} registrado correctamente.";
         return RedirectToAction(nameof(Index));
+    }
+
+    /// <summary>Turno abierto del usuario autenticado (el nombre escrito a mano no identifica a nadie).</summary>
+    private async Task<CajaTurno?> ObtenerTurnoDelUsuarioAsync()
+    {
+        var usuarioId = SesionUsuario.ObtenerUsuarioId(User) ?? 0;
+        return await _cajaRepo.GetTurnoAbiertoDeUsuarioAsync(usuarioId);
+    }
+
+    /// <summary>Sucursal donde opera este terminal: la principal de la empresa emisora.</summary>
+    private async Task<(int SucursalId, string? Nombre)> ResolverSucursalAsync()
+    {
+        var enterprise = await _enterpriseRepo.GetDefaultAsync();
+        var sucursal = enterprise?.Sucursales.FirstOrDefault();
+        return (sucursal?.Id ?? 1, sucursal?.Nombre);
     }
 }

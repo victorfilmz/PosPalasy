@@ -28,5 +28,12 @@ public enum EstadoFacturaElectronica : int
     /// <summary>
     /// Factura emitida localmente en modo contingencia (RFCE 32) pendiente de reenvío por falla/timeout en DGII.
     /// </summary>
-    PendienteReenvio = 4
+    PendienteReenvio = 4,
+
+    /// <summary>
+    /// Comprobante registrado localmente que aún NO ha sido transmitido a la DGII. Es el estado
+    /// inicial correcto de un comprobante nuevo; no debe confundirse con <see cref="EnProceso"/>,
+    /// que implica que ya existe un TrackId de la DGII.
+    /// </summary>
+    NoEnviado = 5
 }

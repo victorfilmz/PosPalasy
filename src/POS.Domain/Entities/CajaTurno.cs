@@ -12,6 +12,15 @@ public class CajaTurno : BaseEntity
 {
     public int SucursalId { get; set; }
     public string Cajero { get; set; } = "Cajero Principal";
+
+    /// <summary>
+    /// Usuario autenticado que abrió el turno. Es la referencia fiable para imputar las ventas al
+    /// arqueo correcto (el nombre escrito a mano no es verificable).
+    /// </summary>
+    public int? UsuarioId { get; set; }
+
+    /// <summary>Nombre de usuario (login) del responsable del turno.</summary>
+    public string? UsuarioNombre { get; set; }
     public DateTime FechaApertura { get; set; } = DateTime.UtcNow;
     public DateTime? FechaCierre { get; set; }
     public TurnoCajaEstado Estado { get; set; } = TurnoCajaEstado.Abierto;

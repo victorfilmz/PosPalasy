@@ -8,6 +8,9 @@ namespace POS.Domain.Repositories;
 public interface IProductoRepository
 {
     Task<Producto?> GetByIdAsync(int id, CancellationToken ct = default);
+
+    /// <summary>Productos del catálogo por identificador, en una sola consulta.</summary>
+    Task<IEnumerable<Producto>> GetByIdsAsync(IEnumerable<int> ids, CancellationToken ct = default);
     Task<Producto?> GetByCodigoAsync(string codigo, CancellationToken ct = default);
     Task<IEnumerable<Producto>> GetAllActiveAsync(CancellationToken ct = default);
     Task<IEnumerable<Producto>> GetAllAsync(CancellationToken ct = default);

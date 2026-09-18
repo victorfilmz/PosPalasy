@@ -54,9 +54,23 @@ public class ElectronicInvoice : BaseEntity
     public string XMLContent { get; set; } = string.Empty;
     public string XMLHash { get; set; } = string.Empty; // CodigoSeguridadeCF (6 caracteres)
     public string? TrackId { get; set; }
-    public EstadoFacturaElectronica Estado { get; set; } = EstadoFacturaElectronica.EnProceso;
 
-    public DateTime FechaEnvio { get; set; } = DateTime.UtcNow;
+    /// <summary>
+    /// Estado fiscal según la DGII. Nace como <see cref="EstadoFacturaElectronica.NoEnviado"/>: un
+    /// comprobante recién registrado no puede declararse "en proceso" sin haber sido transmitido.
+    /// </summary>
+    public EstadoFacturaElectronica Estado { get; set; } = EstadoFacturaElectronica.NoEnviado;
+
+    /// <summary>Estado del eje técnico local de emisión (creado, validado, firmado, encolado…).</summary>
+    public EstadoEmisionECF EstadoEmision { get; set; } = EstadoEmisionECF.Creada;
+
+    /// <summary>Último intento de transmisión a la DGII (trazabilidad operativa).</summary>
+    public DateTime? FechaUltimoIntentoEnvio { get; set; }
+
+    /// <summary>Código HTTP del último intento de transmisión; null si no hubo respuesta.</summary>
+    public int? UltimoCodigoHttp { get; set; }
+
+    public DateTime? FechaEnvio { get; set; }
     public DateTime? FechaAprobacion { get; set; }
     public DateTime? FechaAnulacion { get; set; }
 

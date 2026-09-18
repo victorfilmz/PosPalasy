@@ -40,6 +40,13 @@ public class InvoiceRepository : IInvoiceRepository
             .FirstOrDefaultAsync(i => i.TrackId == trackId, ct);
     }
 
+    public async Task<ElectronicInvoice?> GetByVentaIdAsync(int ventaId, CancellationToken ct = default)
+    {
+        return await _context.ElectronicInvoices
+            .Include(i => i.Items)
+            .FirstOrDefaultAsync(i => i.VentaId == ventaId, ct);
+    }
+
     public async Task<IEnumerable<ElectronicInvoice>> GetByRNCAsync(string rnc, TipoeCFType? tipo = null, CancellationToken ct = default)
     {
         var query = _context.ElectronicInvoices.Where(i => i.RNCEmisor == rnc);

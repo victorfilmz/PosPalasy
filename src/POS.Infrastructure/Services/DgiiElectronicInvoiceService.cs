@@ -8,6 +8,7 @@ using POS.Application.DTOs;
 using POS.Application.Interfaces;
 using POS.Application.Services;
 using POS.Application.Validators;
+using POS.Domain.Common;
 using POS.Domain.Entities;
 using POS.Domain.Enums;
 using POS.Domain.Repositories;
@@ -16,6 +17,26 @@ using POS.Infrastructure.XmlSerialization;
 
 namespace POS.Infrastructure.Services;
 
+/// <summary>
+/// Servicio de comprobantes electrónicos.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Separación de responsabilidades que exige la operación real del POS:
+/// </para>
+/// <list type="bullet">
+/// <item><see cref="PrepararYRegistrarAsync"/> construye y persiste el comprobante SIN hablar con la
+/// DGII. Es el paso que pertenece a la transacción de la venta.</item>
+/// <item><see cref="EnviarAsync"/> transmite un comprobante ya registrado y actualiza su estado con
+/// la respuesta real. Nunca se ejecuta dentro de la transacción de la venta.</item>
+/// </list>
+/// <para>
+/// Estado actual de la construcción del documento: el XML se genera y se persiste, pero la
+/// validación contra el XSD oficial y la firma XML-DSig todavía no forman parte del flujo (fases
+/// posteriores del plan). El estado de emisión lo refleja de forma honesta: no se declara validado
+/// ni firmado lo que no se ha validado ni firmado.
+/// </para>
+/// </remarks>
 public class DgiiElectronicInvoiceService : IElectronicInvoiceService
 {
     private readonly IXmlSerializer _xmlSerializer;
@@ -24,6 +45,7 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
     private readonly IDgiiApiClient _dgiiApiClient;
     private readonly IInvoiceRepository _invoiceRepository;
     private readonly IAnulacionRepository _anulacionRepository;
+    private readonly IEmisionDGIIQueueRepository _queueRepository;
     private readonly ILogger<DgiiElectronicInvoiceService> _logger;
     private readonly string _xsdBasePath;
 
@@ -34,6 +56,7 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
         IDgiiApiClient dgiiApiClient,
         IInvoiceRepository invoiceRepository,
         IAnulacionRepository anulacionRepository,
+        IEmisionDGIIQueueRepository queueRepository,
         ILogger<DgiiElectronicInvoiceService> logger,
         string? xsdBasePath = null)
     {
@@ -43,6 +66,7 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
         _dgiiApiClient = dgiiApiClient ?? throw new ArgumentNullException(nameof(dgiiApiClient));
         _invoiceRepository = invoiceRepository ?? throw new ArgumentNullException(nameof(invoiceRepository));
         _anulacionRepository = anulacionRepository ?? throw new ArgumentNullException(nameof(anulacionRepository));
+        _queueRepository = queueRepository ?? throw new ArgumentNullException(nameof(queueRepository));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
         _xsdBasePath = xsdBasePath ?? Path.Combine(AppContext.BaseDirectory, "documentacion xsd");
@@ -72,41 +96,36 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
         return _hashGenerator.Generate(xmlContent);
     }
 
-    public async Task<ElectronicInvoiceResponse> EmitirAsync(EmitirFacturaCommand command, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Construye el XML, calcula el código de seguridad y persiste el comprobante como
+    /// <see cref="EstadoFacturaElectronica.NoEnviado"/>. No hay ninguna llamada de red aquí: si algo
+    /// falla, la transacción de la venta se revierte por completo.
+    /// </summary>
+    public async Task<ComprobantePreparado> PrepararYRegistrarAsync(
+        PrepararComprobanteCommand command,
+        CancellationToken cancellationToken = default)
     {
-        var req = command.Request;
+        if (command == null) throw new ArgumentNullException(nameof(command));
 
-        // 1. Validación de reglas de negocio en memoria
+        var req = command.Request
+            ?? throw new ReglaDeNegocioException(
+                "La solicitud del comprobante es nula.",
+                "SOLICITUD_INVALIDA");
+
         var valResult = EmitirFacturaValidator.Validar(req);
         if (!valResult.EsValido)
-        {
-            return new ElectronicInvoiceResponse
-            {
-                Exitoso = false,
-                eNCF = req.eNCF,
-                Estado = EstadoFacturaElectronica.Rechazado,
-                Mensaje = string.Join(" | ", valResult.Errores)
-            };
-        }
+            throw new ReglaDeNegocioException(
+                string.Join(" | ", valResult.Errores),
+                "COMPROBANTE_INVALIDO");
 
-        // 2. Serialización XML
+        // 1. Construcción del documento local.
         var xml = _xmlSerializer.Serialize(req);
 
-        // 3. Generación del Hash de seguridad (6 caracteres)
+        // 2. Código de seguridad sobre el documento construido.
         var hash = _hashGenerator.Generate(xml);
         req.CodigoSeguridadeCF = hash;
 
-        // 4. Codificar a Base64
-        var xmlBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(xml));
-
-        // 5. Envío a DGII vía REST API JSON
-        var dgiiResp = await _dgiiApiClient.EnviarFacturaAsync(xmlBase64, hash, cancellationToken);
-
-        var estado = dgiiResp.EsExitoso
-            ? EstadoFacturaElectronica.EnProceso
-            : EstadoFacturaElectronica.PendienteReenvio; // Contingencia / Reenvío
-
-        // 6. Persistencia en Base de Datos
+        // 3. Persistencia del comprobante sin transmitir.
         var invoiceEntity = new ElectronicInvoice
         {
             VentaId = command.VentaId,
@@ -133,9 +152,10 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
             MontoTotal = req.Totales.Total,
             XMLContent = xml,
             XMLHash = hash,
-            TrackId = dgiiResp.TrackId,
-            Estado = estado,
-            FechaEnvio = DateTime.UtcNow
+            TrackId = null,
+            Estado = EstadoFacturaElectronica.NoEnviado,
+            EstadoEmision = EstadoEmisionECF.Creada,
+            FechaEnvio = null
         };
 
         foreach (var itm in req.Items)
@@ -154,21 +174,217 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
                 MontoITBIS = itm.ITBIS,
                 CodigoISC = itm.ISC,
                 MontoISC = itm.ISCValue,
+                // El total de la línea incluye sus impuestos: es la única cifra coherente con el total
+                // del comprobante (la correspondencia exacta con "MontoItem" del XSD se ajusta en la
+                // fase de XML/XSD).
                 MontoItem = itm.Total
             });
         }
 
+        AvanzarEstado(invoiceEntity, EstadoEmisionECF.XmlGenerado);
+
         await _invoiceRepository.AddAsync(invoiceEntity, cancellationToken);
+
+        _logger.LogInformation(
+            "Comprobante {eNCF} registrado localmente (Id {Id}) con estado {EstadoEmision}; pendiente de transmisión a la DGII.",
+            invoiceEntity.eNCF,
+            invoiceEntity.Id,
+            invoiceEntity.EstadoEmision);
+
+        return new ComprobantePreparado(
+            invoiceEntity.Id,
+            invoiceEntity.eNCF,
+            invoiceEntity.EstadoEmision,
+            invoiceEntity.Estado,
+            xml);
+    }
+
+    /// <summary>
+    /// Transmite un comprobante ya registrado y guarda el resultado real.
+    /// </summary>
+    /// <remarks>
+    /// Clasificación de la respuesta: éxito ⇒ EnProceso (esperando resultado fiscal); sin respuesta
+    /// o 5xx/429 ⇒ envío incierto con reintento progresivo; credenciales (401/403) ⇒ error permanente
+    /// sin marcar el documento como rechazado; rechazo de validación (400/404/409/422) ⇒ Rechazado.
+    /// </remarks>
+    public async Task<ElectronicInvoiceResponse> EnviarAsync(
+        int electronicInvoiceId,
+        CancellationToken cancellationToken = default)
+    {
+        var invoice = await _invoiceRepository.GetByIdAsync(electronicInvoiceId, cancellationToken)
+            ?? throw new ReglaDeNegocioException(
+                $"El comprobante #{electronicInvoiceId} no existe.",
+                "COMPROBANTE_NO_ENCONTRADO");
+
+        // Guardas de idempotencia fiscal: no se reenvía lo ya aceptado ni lo anulado.
+        if (invoice.Estado == EstadoFacturaElectronica.Aceptado)
+        {
+            return new ElectronicInvoiceResponse
+            {
+                Exitoso = true,
+                eNCF = invoice.eNCF,
+                TrackId = invoice.TrackId,
+                Estado = invoice.Estado,
+                EstadoEmision = invoice.EstadoEmision,
+                CodigoSeguridadeCF = invoice.XMLHash,
+                Mensaje = "El comprobante ya fue aceptado por la DGII; no se reenvió."
+            };
+        }
+
+        if (invoice.Estado == EstadoFacturaElectronica.Anulado)
+            throw new ReglaDeNegocioException(
+                "Un comprobante anulado no puede transmitirse.",
+                "COMPROBANTE_ANULADO");
+
+        // Exclusión mutua de la transmisión: quien transmite debe poseer el lease del elemento de cola.
+        // Así el envío inmediato de la venta y el trabajador en segundo plano nunca envían el mismo
+        // comprobante a la vez, y un envío abandonado se retoma cuando el lease vence.
+        var elementoCola = await _queueRepository.GetPendientePorFacturaAsync(invoice.Id, cancellationToken);
+        if (elementoCola != null)
+        {
+            var reclamado = await _queueRepository.ReclamarAsync(
+                elementoCola.Id,
+                $"envio-{Guid.NewGuid():N}",
+                DateTime.UtcNow,
+                cancellationToken);
+
+            if (!reclamado)
+            {
+                return new ElectronicInvoiceResponse
+                {
+                    Exitoso = false,
+                    eNCF = invoice.eNCF,
+                    Estado = invoice.Estado,
+                    EstadoEmision = invoice.EstadoEmision,
+                    EsRecuperable = true,
+                    Mensaje = "El comprobante ya está siendo transmitido por otro proceso; su estado se confirmará en breve."
+                };
+            }
+        }
+
+        // La transmisión se declara iniciada ANTES de salir a la red: si el proceso muere durante la
+        // llamada, el estado refleja que el documento pudo haber llegado a la DGII.
+        if (invoice.EstadoEmision.PuedeTransicionarA(EstadoEmisionECF.Enviada))
+        {
+            invoice.EstadoEmision = EstadoEmisionECF.Enviada;
+            await _invoiceRepository.UpdateAsync(invoice, cancellationToken);
+        }
+
+        var xmlBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(invoice.XMLContent));
+        var respuesta = await _dgiiApiClient.EnviarFacturaAsync(xmlBase64, invoice.XMLHash, cancellationToken);
+
+        var recuperable = ClasificadorErroresDGII.EsRecuperable(respuesta.CodigoHttp, respuesta.EsExitoso);
+        var incierto = !respuesta.EsExitoso && ClasificadorErroresDGII.EsAmbiguo(respuesta.CodigoHttp);
+
+        invoice.UltimoCodigoHttp = respuesta.CodigoHttp;
+        invoice.FechaUltimoIntentoEnvio = DateTime.UtcNow;
+
+        if (respuesta.EsExitoso)
+        {
+            invoice.TrackId = respuesta.TrackId;
+            invoice.Estado = EstadoFacturaElectronica.EnProceso;
+            invoice.FechaEnvio = DateTime.UtcNow;
+            AvanzarEstado(invoice, EstadoEmisionECF.ConfirmadaEnvio);
+        }
+        else if (incierto)
+        {
+            // Sin respuesta alguna: pudo haber sido recibido. Se resuelve consultando, no reenviando a ciegas.
+            invoice.Estado = EstadoFacturaElectronica.PendienteReenvio;
+            AvanzarEstado(invoice, EstadoEmisionECF.EnvioIncierto);
+        }
+        else if (respuesta.CodigoHttp is 401 or 403)
+        {
+            // Problema de credenciales del emisor, no del documento.
+            invoice.Estado = EstadoFacturaElectronica.NoEnviado;
+            AvanzarEstado(invoice, EstadoEmisionECF.ErrorPermanente);
+        }
+        else if (recuperable)
+        {
+            // La DGII no procesó la solicitud: se reintenta con espera progresiva.
+            invoice.Estado = EstadoFacturaElectronica.PendienteReenvio;
+            AvanzarEstado(invoice, EstadoEmisionECF.ErrorTemporal);
+        }
+        else
+        {
+            invoice.Estado = EstadoFacturaElectronica.Rechazado;
+            invoice.MotivoRechazo = respuesta.Mensaje;
+            AvanzarEstado(invoice, EstadoEmisionECF.ErrorPermanente);
+        }
+
+        await _invoiceRepository.UpdateAsync(invoice, cancellationToken);
+
+        // La fila de la cola refleja el mismo resultado: si se confirmó, deja de ser candidata.
+        if (elementoCola != null)
+        {
+            if (respuesta.EsExitoso)
+            {
+                await _queueRepository.MarcarEnviadoAsync(elementoCola.Id, respuesta.TrackId, respuesta.CodigoHttp, cancellationToken);
+            }
+            else
+            {
+                var proximoIntento = recuperable
+                    ? PoliticaReintentoCola.ProximoIntento(
+                        elementoCola.Intentos + 1,
+                        DateTime.UtcNow,
+                        elementoCola.Id)
+                    : (DateTime?)null;
+
+                await _queueRepository.MarcarFalloAsync(
+                    elementoCola.Id,
+                    respuesta.Mensaje ?? ClasificadorErroresDGII.Describir(respuesta.CodigoHttp),
+                    respuesta.CodigoHttp,
+                    recuperable,
+                    proximoIntento,
+                    cancellationToken);
+            }
+        }
+
+        if (respuesta.EsExitoso)
+        {
+            _logger.LogInformation(
+                "e-CF {eNCF} recibido por la DGII. TrackId: {TrackId}",
+                invoice.eNCF,
+                respuesta.TrackId);
+        }
+        else
+        {
+            _logger.LogWarning(
+                "e-CF {eNCF} no confirmado por la DGII (HTTP {Codigo}, recuperable: {Recuperable}): {Mensaje}",
+                invoice.eNCF,
+                respuesta.CodigoHttp,
+                recuperable,
+                respuesta.Mensaje);
+        }
 
         return new ElectronicInvoiceResponse
         {
-            Exitoso = dgiiResp.EsExitoso,
-            eNCF = req.eNCF,
-            TrackId = dgiiResp.TrackId,
-            Estado = estado,
-            CodigoSeguridadeCF = hash,
-            Mensaje = dgiiResp.Mensaje
+            Exitoso = respuesta.EsExitoso,
+            eNCF = invoice.eNCF,
+            TrackId = respuesta.TrackId,
+            Estado = invoice.Estado,
+            EstadoEmision = invoice.EstadoEmision,
+            CodigoHttp = respuesta.CodigoHttp,
+            EsRecuperable = recuperable,
+            CodigoSeguridadeCF = invoice.XMLHash,
+            Mensaje = respuesta.Mensaje ?? ClasificadorErroresDGII.Describir(respuesta.CodigoHttp)
         };
+    }
+
+    /// <summary>
+    /// Emisión completa (registrar y transmitir) en una sola operación, para la emisión manual desde
+    /// el módulo de facturación.
+    /// </summary>
+    public async Task<ElectronicInvoiceResponse> EmitirAsync(
+        EmitirFacturaCommand command,
+        CancellationToken cancellationToken = default)
+    {
+        if (command == null) throw new ArgumentNullException(nameof(command));
+
+        var preparado = await PrepararYRegistrarAsync(
+            new PrepararComprobanteCommand(command.Request, command.VentaId),
+            cancellationToken);
+
+        return await EnviarAsync(preparado.ElectronicInvoiceId, cancellationToken);
     }
 
     public async Task<AnulacionResponse> AnularAsync(AnulacionRequest request, CancellationToken cancellationToken = default)
@@ -225,8 +441,8 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
         {
             Exitoso = true,
             TrackId = dgiiResp.TrackId,
-            Mensaje = dgiiResp.EsExitoso 
-                ? "Anulación procesada y aceptada por la DGII." 
+            Mensaje = dgiiResp.EsExitoso
+                ? "Anulación procesada y aceptada por la DGII."
                 : $"Anulación registrada localmente. Pendiente confirmación DGII: {dgiiResp.Mensaje}"
         };
     }
@@ -276,7 +492,12 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
 
             invoice.Estado = nuevoEstado;
             if (nuevoEstado == EstadoFacturaElectronica.Aceptado)
+            {
                 invoice.FechaAprobacion = DateTime.UtcNow;
+                // La confirmación resuelve un envío previamente incierto.
+                if (invoice.EstadoEmision.PuedeTransicionarA(EstadoEmisionECF.ConfirmadaEnvio))
+                    invoice.EstadoEmision = EstadoEmisionECF.ConfirmadaEnvio;
+            }
 
             await _invoiceRepository.UpdateAsync(invoice, cancellationToken);
         }
@@ -290,6 +511,11 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
         };
     }
 
+    /// <summary>
+    /// Reintento de transmisión para una factura localizada por su eNCF. Delega en
+    /// <see cref="EnviarAsync"/> para que exista una única ruta de transmisión y de actualización
+    /// de estado.
+    /// </summary>
     public async Task<ElectronicInvoiceResponse> ReenviarAsync(string eNCF, CancellationToken cancellationToken = default)
     {
         var invoice = await _invoiceRepository.GetByENCFAsync(eNCF, cancellationToken);
@@ -303,23 +529,16 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
             };
         }
 
-        var xmlBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(invoice.XMLContent));
-        var dgiiResp = await _dgiiApiClient.EnviarFacturaAsync(xmlBase64, invoice.XMLHash, cancellationToken);
+        return await EnviarAsync(invoice.Id, cancellationToken);
+    }
 
-        if (dgiiResp.EsExitoso)
-        {
-            invoice.TrackId = dgiiResp.TrackId;
-            invoice.Estado = EstadoFacturaElectronica.EnProceso;
-            await _invoiceRepository.UpdateAsync(invoice, cancellationToken);
-        }
+    private static void AvanzarEstado(ElectronicInvoice invoice, EstadoEmisionECF nuevoEstado)
+    {
+        // Repetir el mismo resultado (un segundo intento con la misma conclusión) no es una transición
+        // inválida: lo que la máquina prohíbe es retroceder o reabrir un estado terminal.
+        if (invoice.EstadoEmision == nuevoEstado)
+            return;
 
-        return new ElectronicInvoiceResponse
-        {
-            Exitoso = dgiiResp.EsExitoso,
-            eNCF = eNCF,
-            TrackId = dgiiResp.TrackId,
-            Estado = invoice.Estado,
-            Mensaje = dgiiResp.Mensaje
-        };
+        invoice.EstadoEmision = invoice.EstadoEmision.ValidarTransicion(nuevoEstado);
     }
 }

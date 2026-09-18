@@ -4,14 +4,13 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
+using POS.Application.CasosDeUso.Ventas;
 using POS.Application.DTOs;
-using POS.Application.Interfaces;
 using POS.Application.Services;
 using POS.Domain.Entities;
-using POS.Domain.Enums;
 using POS.Domain.Repositories;
 using POS.Domain.Types;
-using POS.Infrastructure.DGII;
 using POS.UI.Security;
 
 namespace POS.UI.Controllers;
@@ -20,6 +19,11 @@ namespace POS.UI.Controllers;
 /// Terminal de punto de venta: catálogo, procesamiento de la venta e impresión del ticket.
 /// Requiere un usuario autenticado con permiso de operación de POS.
 /// </summary>
+/// <remarks>
+/// Este controlador es un adaptador HTTP: no calcula importes, no asigna numeración fiscal, no mueve
+/// inventario ni decide estados. Esas responsabilidades viven en el caso de uso
+/// <see cref="ProcesarVentaHandler"/>.
+/// </remarks>
 [Authorize(Policy = Politicas.OperacionPos)]
 public class PosController : Controller
 {
@@ -28,13 +32,10 @@ public class PosController : Controller
     private readonly ISucursalRepository _sucursalRepo;
     private readonly IClienteRepository _clienteRepo;
     private readonly IEnterpriseRepository _enterpriseRepo;
-    private readonly IVentaRepository _ventaRepo;
     private readonly IInvoiceRepository _invoiceRepo;
     private readonly ICajaTurnoRepository _cajaRepo;
-    private readonly IElectronicInvoiceService _invoiceService;
-    private readonly ITaxCalculator _taxCalculator;
-    private readonly IMovimientoInventarioRepository _movimientoRepo;
-    private readonly IEmisionDGIIQueueRepository _queueRepo;
+    private readonly ProcesarVentaHandler _procesarVenta;
+    private readonly ILogger<PosController> _logger;
 
     public PosController(
         IProductoRepository productoRepo,
@@ -42,40 +43,37 @@ public class PosController : Controller
         ISucursalRepository sucursalRepo,
         IClienteRepository clienteRepo,
         IEnterpriseRepository enterpriseRepo,
-        IVentaRepository ventaRepo,
         IInvoiceRepository invoiceRepo,
         ICajaTurnoRepository cajaRepo,
-        IElectronicInvoiceService invoiceService,
-        ITaxCalculator taxCalculator,
-        IMovimientoInventarioRepository movimientoRepo,
-        IEmisionDGIIQueueRepository queueRepo)
+        ProcesarVentaHandler procesarVenta,
+        ILogger<PosController> logger)
     {
         _productoRepo = productoRepo;
         _inventarioRepo = inventarioRepo;
         _sucursalRepo = sucursalRepo;
         _clienteRepo = clienteRepo;
         _enterpriseRepo = enterpriseRepo;
-        _ventaRepo = ventaRepo;
         _invoiceRepo = invoiceRepo;
         _cajaRepo = cajaRepo;
-        _invoiceService = invoiceService;
-        _taxCalculator = taxCalculator;
-        _movimientoRepo = movimientoRepo;
-        _queueRepo = queueRepo;
+        _procesarVenta = procesarVenta;
+        _logger = logger;
     }
 
     [HttpGet]
     public async Task<IActionResult> Index()
     {
         var sucursales = (await _sucursalRepo.GetAllActiveAsync()).ToList();
-        var turnoActivo = await _cajaRepo.GetTurnoActivoAsync();
+
+        // El turno relevante es el del usuario que está operando el terminal.
+        var usuarioId = SesionUsuario.ObtenerUsuarioId(User) ?? 0;
+        var turnoActivo = await _cajaRepo.GetTurnoAbiertoDeUsuarioAsync(usuarioId);
 
         // Determinar sucursal activa: la del turno o la sucursal principal
-        int activeSucursalId = turnoActivo?.SucursalId 
-            ?? (await _sucursalRepo.GetPrincipalAsync())?.Id 
+        int activeSucursalId = turnoActivo?.SucursalId
+            ?? (await _sucursalRepo.GetPrincipalAsync())?.Id
             ?? (sucursales.FirstOrDefault()?.Id ?? 1);
 
-        var sucursalActiva = sucursales.FirstOrDefault(s => s.Id == activeSucursalId) 
+        var sucursalActiva = sucursales.FirstOrDefault(s => s.Id == activeSucursalId)
             ?? await _sucursalRepo.GetPrincipalAsync();
 
         var productos = (await _productoRepo.GetAllActiveAsync()).ToList();
@@ -138,247 +136,102 @@ public class PosController : Controller
         }));
     }
 
+    /// <summary>
+    /// Registra una venta. Toda la lógica (precios, impuestos, cobro, numeración, inventario, caja,
+    /// comprobante y cola) ocurre en una única transacción dentro del caso de uso.
+    /// </summary>
     [HttpPost]
     public async Task<IActionResult> ProcesarVenta([FromBody] VentaPosRequest request)
     {
-        if (request == null || request.Items == null || !request.Items.Any())
-            return BadRequest(new { mensaje = "El carrito de compras no contiene productos." });
-
-        var enterprise = await _enterpriseRepo.GetDefaultAsync();
-        if (enterprise == null)
-            return BadRequest(new { mensaje = "No hay una empresa configurada en el sistema." });
-
-        var turnoActivo = await _cajaRepo.GetTurnoActivoAsync();
-        int targetSucursalId = request.SucursalId 
-            ?? turnoActivo?.SucursalId 
-            ?? (await _sucursalRepo.GetPrincipalAsync())?.Id 
-            ?? 1;
-
-        // Validar política de inventario por almacén de sucursal
-        if (!enterprise.PermitirVentaSinStock)
-        {
-            foreach (var itm in request.Items.Where(i => i.ProductoId > 0))
+        if (request == null)
+            return BadRequest(new VentaPosResponse
             {
-                var stockDisponible = await _inventarioRepo.GetStockAsync(itm.ProductoId, targetSucursalId);
-                if (stockDisponible < itm.Cantidad)
-                {
-                    var prod = await _productoRepo.GetByIdAsync(itm.ProductoId);
-                    var desc = prod?.Descripcion ?? $"Producto #{itm.ProductoId}";
-                    return BadRequest(new { mensaje = $"Stock insuficiente en sucursal para '{desc}'. Existencia disponible: {stockDisponible:0.##}, solicitada: {itm.Cantidad:0.##}." });
-                }
-            }
-        }
-
-        // 1. Crear Venta de Dominio
-        var venta = new Venta
-        {
-            NumeroFacturaInterna = $"FAC-{DateTime.UtcNow:yyyyMMddHHmmss}",
-            EnterpriseId = enterprise.Id,
-            SucursalId = targetSucursalId,
-            CajaTurnoId = turnoActivo?.Id,
-            ClienteId = request.ClienteId,
-            Fecha = DateTime.UtcNow,
-            TipoPago = request.TipoPago,
-            MetodoPago = request.MetodoPago,
-            TipoeCF = request.TipoeCF
-        };
-
-        foreach (var item in request.Items)
-        {
-            var ventaItem = new VentaItem
-            {
-                ProductoId = item.ProductoId > 0 ? item.ProductoId : null,
-                Descripcion = item.Descripcion,
-                Cantidad = item.Cantidad,
-                PrecioUnitario = item.PrecioUnitario,
-                Descuento = item.Descuento,
-                IndicadorFacturacion = item.IndicadorFacturacion
-            };
-            venta.AddItem(ventaItem);
-        }
-
-        // 2. Pagos Mixtos si fueron suministrados
-        if (request.Pagos != null && request.Pagos.Any())
-        {
-            foreach (var p in request.Pagos)
-            {
-                venta.Pagos.Add(new PagoFactura
-                {
-                    MetodoPago = p.MetodoPago.ToString(),
-                    Monto = p.Monto,
-                    Referencia = p.Referencia
-                });
-            }
-        }
-
-        await _ventaRepo.AddAsync(venta);
-
-        // 3. Generar el siguiente eNCF según el tipo
-        var serie = request.TipoeCF == TipoeCFType.FacturaCreditoFiscal ? "E31" : "E32";
-        var ultimoEncf = await _invoiceRepo.GetLastENCFAsync(serie);
-
-        long secuencia = 1;
-        if (!string.IsNullOrEmpty(ultimoEncf) && ultimoEncf.Length >= 13)
-        {
-            var secPart = ultimoEncf[3..];
-            if (long.TryParse(secPart, out var num))
-                secuencia = num + 1;
-        }
-
-        var nuevoENCF = $"{serie}{secuencia:D10}";
-
-        // 4. Preparar request e-CF y calcular totales
-        var invoiceItems = request.Items.Select((itm, idx) => new InvoiceItemRequest
-        {
-            Indice = idx + 1,
-            Codigo = itm.ProductoId.ToString(),
-            Descripcion = itm.Descripcion,
-            Cantidad = itm.Cantidad,
-            PrecioUnitario = itm.PrecioUnitario,
-            Descuento = itm.Descuento,
-            IndicadorFacturacion = itm.IndicadorFacturacion,
-            UnidadMedida = itm.UnidadMedida
-        }).ToList();
-
-        var totales = _taxCalculator.CalcularTotales(invoiceItems);
-
-        // 5. Impacto en Arqueo de Turno de Caja (soporte para pagos mixtos)
-        if (turnoActivo != null)
-        {
-            if (request.Pagos != null && request.Pagos.Any())
-            {
-                turnoActivo.VentasEfectivo += request.Pagos.Where(p => p.MetodoPago == MetodoPago.Efectivo).Sum(p => p.Monto);
-                turnoActivo.VentasTarjeta += request.Pagos.Where(p => p.MetodoPago == MetodoPago.TarjetaDebitoCredito).Sum(p => p.Monto);
-                turnoActivo.VentasTransferencia += request.Pagos.Where(p => p.MetodoPago == MetodoPago.ChequeTransferenciaDeposito).Sum(p => p.Monto);
-            }
-            else
-            {
-                if (request.MetodoPago == MetodoPago.Efectivo)
-                    turnoActivo.VentasEfectivo += totales.Total;
-                else if (request.MetodoPago == MetodoPago.TarjetaDebitoCredito)
-                    turnoActivo.VentasTarjeta += totales.Total;
-                else
-                    turnoActivo.VentasTransferencia += totales.Total;
-            }
-
-            turnoActivo.TotalVentas += totales.Total;
-            turnoActivo.CantidadTransacciones += 1;
-            await _cajaRepo.UpdateAsync(turnoActivo);
-        }
-
-        var ecfRequest = new ElectronicInvoiceRequest
-        {
-            TipoeCF = request.TipoeCF,
-            eNCF = nuevoENCF,
-            FechaFactura = FechaDominicana.Today,
-            TipoIngresos = TipoIngresosType.IngresosOperaciones,
-            TipoPago = request.TipoPago,
-            MetodoPago = request.MetodoPago,
-            Emisor = new EmisorRequest
-            {
-                RNC = enterprise.RNC,
-                RazonSocial = enterprise.RazonSocial,
-                NombreComercial = enterprise.NombreComercial,
-                Direccion = enterprise.Direccion,
-                Telefono = enterprise.Telefono,
-                Email = enterprise.Email,
-                CodigoProvincia = enterprise.CodigoProvincia,
-                CodigoMunicipio = enterprise.CodigoMunicipio
-            },
-            Comprador = new CompradorRequest
-            {
-                RNC = request.RNCComprador,
-                RazonSocial = string.IsNullOrWhiteSpace(request.RazonSocialComprador) ? "Consumidor Final" : request.RazonSocialComprador
-            },
-            Items = invoiceItems,
-            Totales = totales
-        };
-
-        // 6. Emitir e-CF con tolerancia a fallas de red (Resiliencia DGII Offline)
-        var emitirCommand = new EmitirFacturaCommand
-        {
-            Request = ecfRequest,
-            VentaId = venta.Id
-        };
-
-        ElectronicInvoiceResponse emitirResult;
-        bool esOffline = false;
-
-        try
-        {
-            emitirResult = await _invoiceService.EmitirAsync(emitirCommand);
-            if (!emitirResult.Exitoso)
-            {
-                esOffline = true;
-            }
-        }
-        catch
-        {
-            esOffline = true;
-            emitirResult = new ElectronicInvoiceResponse
-            {
-                Exitoso = true,
-                Estado = EstadoFacturaElectronica.PendienteReenvio,
-                Mensaje = "Venta registrada localmente. Factura encolada para transmisión diferida a DGII (Modo Resiliente)."
-            };
-        }
-
-        var savedInvoice = await _invoiceRepo.GetByENCFAsync(nuevoENCF);
-
-        // Si se emitió en modo offline o hubo fallo de comunicación con DGII, encolar en cola de fondo
-        if (esOffline && savedInvoice != null)
-        {
-            await _queueRepo.AddAsync(new EmisionDGIIQueue
-            {
-                FacturaId = savedInvoice.Id,
-                eNCF = nuevoENCF,
-                XmlFirmado = savedInvoice.XMLContent ?? string.Empty,
-                Intentos = 0,
-                EnviadoExitosamente = false,
-                FechaRegistro = DateTime.UtcNow
+                Exitoso = false,
+                CodigoError = "SOLICITUD_NULA",
+                Mensaje = "No se recibió la solicitud de venta."
             });
-        }
 
-        var montoRecibido = request.MontoRecibido ?? totales.Total;
-        var cambio = Math.Max(0, montoRecibido - totales.Total);
+        var command = ConstruirComando(request);
 
-        // 7. Descontar existencias en el Almacén de la Sucursal Activa y registrar Kardex
-        foreach (var itm in request.Items.Where(i => i.ProductoId > 0))
+        var resultado = await _procesarVenta.EjecutarAsync(command, HttpContext.RequestAborted);
+
+        if (!resultado.Exitoso)
         {
-            var stockAnterior = await _inventarioRepo.GetStockAsync(itm.ProductoId, targetSucursalId);
-            var resultante = stockAnterior - itm.Cantidad;
+            _logger.LogWarning(
+                "Venta rechazada ({Codigo}): {Mensaje}",
+                resultado.CodigoError,
+                resultado.Mensaje);
 
-            await _inventarioRepo.SetStockAsync(itm.ProductoId, targetSucursalId, resultante);
-
-            var prod = await _productoRepo.GetByIdAsync(itm.ProductoId);
-            await _movimientoRepo.AddAsync(new MovimientoInventario
+            return BadRequest(new VentaPosResponse
             {
-                ProductoId = itm.ProductoId,
-                SucursalId = targetSucursalId,
-                Tipo = TipoMovimientoInventario.VentaPOS,
-                Cantidad = itm.Cantidad,
-                StockAnterior = stockAnterior,
-                StockNuevo = resultante,
-                CostoUnitario = prod?.CostoUnitario ?? 0m,
-                Concepto = $"Salida POS e-CF {nuevoENCF}",
-                ReferenciaDocumento = nuevoENCF,
-                Fecha = DateTime.UtcNow
+                Exitoso = false,
+                CodigoError = resultado.CodigoError,
+                Mensaje = resultado.Mensaje
             });
         }
 
         return Ok(new VentaPosResponse
         {
             Exitoso = true,
-            VentaId = venta.Id,
-            ElectronicInvoiceId = savedInvoice?.Id,
-            eNCF = nuevoENCF,
-            TrackId = emitirResult.TrackId,
-            Total = totales.Total,
-            Cambio = cambio,
-            Estado = emitirResult.Estado,
-            EsOfflineDGII = esOffline,
-            Mensaje = emitirResult.Mensaje
+            Duplicada = resultado.Duplicada,
+            VentaId = resultado.VentaId,
+            ElectronicInvoiceId = resultado.ElectronicInvoiceId,
+            eNCF = resultado.eNCF,
+            TrackId = resultado.TrackId,
+            Total = resultado.Total,
+            Cambio = resultado.Cambio,
+            Estado = resultado.EstadoFiscal,
+            EsOfflineDGII = resultado.EsOfflineDGII,
+            Mensaje = resultado.Mensaje
         });
+    }
+
+    /// <summary>
+    /// Traduce el cuerpo HTTP al comando del caso de uso. Los importes, impuestos y descripciones que
+    /// el navegador pudiera enviar no se propagan: el servidor los resuelve desde el catálogo.
+    /// </summary>
+    private ProcesarVentaCommand ConstruirComando(VentaPosRequest request)
+    {
+        var clave = request.ClaveIdempotencia ?? Guid.Empty;
+        if (clave == Guid.Empty)
+        {
+            // Compatibilidad con terminales que aún no envían la clave: sin ella no hay protección
+            // contra duplicados, por lo que se registra el hecho y se genera una nueva.
+            clave = Guid.NewGuid();
+            _logger.LogWarning(
+                "La solicitud de venta llegó sin clave de idempotencia; no se pudo proteger contra reenvíos duplicados.");
+        }
+
+        return new ProcesarVentaCommand
+        {
+            ClaveIdempotencia = clave,
+            SucursalId = request.SucursalId,
+            ClienteId = request.ClienteId,
+            RNCComprador = request.RNCComprador,
+            RazonSocialComprador = request.RazonSocialComprador,
+            TipoeCF = request.TipoeCF,
+            TipoPago = request.TipoPago,
+            MetodoPago = request.MetodoPago,
+            MontoRecibido = request.MontoRecibido,
+            UsuarioId = SesionUsuario.ObtenerUsuarioId(User) ?? 0,
+            UsuarioNombre = SesionUsuario.ObtenerNombre(User),
+            Items = (request.Items ?? new List<VentaPosItemRequest>())
+                .Select(i => new ItemVentaCommand
+                {
+                    ProductoId = i.ProductoId,
+                    Cantidad = i.Cantidad,
+                    Descuento = i.Descuento
+                })
+                .ToList(),
+            Pagos = (request.Pagos ?? new List<PagoFacturaDto>())
+                .Select(p => new PagoVentaCommand
+                {
+                    MetodoPago = p.MetodoPago,
+                    Monto = p.Monto,
+                    Referencia = p.Referencia
+                })
+                .ToList()
+        };
     }
 
     [HttpGet]
@@ -396,8 +249,7 @@ public class PosController : Controller
             invoice.FechaEmision,
             invoice.MontoTotal,
             invoice.TotalITBIS,
-            invoice.XMLHash
-        );
+            invoice.XMLHash);
 
         ViewBag.Enterprise = enterprise;
         ViewBag.UrlQr = urlQr;

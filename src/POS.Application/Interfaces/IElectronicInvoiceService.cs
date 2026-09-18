@@ -17,6 +17,27 @@ public class EmitirFacturaCommand
 /// </summary>
 public interface IElectronicInvoiceService
 {
+    /// <summary>
+    /// Construye el comprobante y lo registra LOCALMENTE (XML, hash, persistencia) SIN transmitirlo.
+    /// Es el paso que pertenece a la transacción de la venta: la comunicación con la DGII ocurre
+    /// después del commit, a través de <see cref="EnviarAsync"/>.
+    /// </summary>
+    Task<ComprobantePreparado> PrepararYRegistrarAsync(
+        PrepararComprobanteCommand command,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Transmite a la DGII un comprobante ya registrado y actualiza su estado local con el
+    /// resultado real. Un fallo aquí NO invalida la venta ya confirmada.
+    /// </summary>
+    Task<ElectronicInvoiceResponse> EnviarAsync(
+        int electronicInvoiceId,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Emisión completa (registrar + transmitir) en una sola llamada. Se conserva para la emisión
+    /// manual desde facturación; el flujo de venta de POS usa las dos operaciones separadas.
+    /// </summary>
     Task<ElectronicInvoiceResponse> EmitirAsync(
         EmitirFacturaCommand command,
         CancellationToken cancellationToken = default);

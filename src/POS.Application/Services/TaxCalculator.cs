@@ -9,7 +9,17 @@ namespace POS.Application.Services;
 public interface ITaxCalculator
 {
     void CalcularLinea(InvoiceItemRequest item);
+
+    /// <summary>
+    /// Calcula cada línea desde cero y totaliza el comprobante.
+    /// </summary>
     TotalesRequest CalcularTotales(IEnumerable<InvoiceItemRequest> items);
+
+    /// <summary>
+    /// Totaliza líneas YA calculadas por el dominio, sin recalcularlas. Es el camino que usa la venta
+    /// de POS: los importes provienen del catálogo del servidor y no deben sobrescribirse aquí.
+    /// </summary>
+    TotalesRequest AgregarTotales(IEnumerable<InvoiceItemRequest> items);
 }
 
 /// <summary>
@@ -44,6 +54,15 @@ public class TaxCalculator : ITaxCalculator
         {
             CalcularLinea(item);
         }
+
+        return AgregarTotales(itemList);
+    }
+
+    public TotalesRequest AgregarTotales(IEnumerable<InvoiceItemRequest> items)
+    {
+        if (items == null) throw new ArgumentNullException(nameof(items));
+
+        var itemList = items.ToList();
 
         var totales = new TotalesRequest
         {

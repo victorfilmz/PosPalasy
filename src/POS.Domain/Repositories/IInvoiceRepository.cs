@@ -16,6 +16,9 @@ public interface IInvoiceRepository
     Task<ElectronicInvoice?> GetByIdAsync(int id, CancellationToken ct = default);
     Task<ElectronicInvoice?> GetByENCFAsync(string encf, CancellationToken ct = default);
     Task<ElectronicInvoice?> GetByTrackIdAsync(string trackId, CancellationToken ct = default);
+
+    /// <summary>Comprobante emitido para una venta (relación uno a uno con la venta).</summary>
+    Task<ElectronicInvoice?> GetByVentaIdAsync(int ventaId, CancellationToken ct = default);
     Task<IEnumerable<ElectronicInvoice>> GetByRNCAsync(string rnc, TipoeCFType? tipo = null, CancellationToken ct = default);
     Task<IEnumerable<ElectronicInvoice>> GetByEstadoAsync(EstadoFacturaElectronica estado, CancellationToken ct = default);
     Task<IEnumerable<ElectronicInvoice>> GetPendingAsync(CancellationToken ct = default);

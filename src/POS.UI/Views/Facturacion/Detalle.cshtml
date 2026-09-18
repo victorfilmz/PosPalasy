@@ -100,7 +100,7 @@
 
                 <div class="mb-3">
                     <span class="text-muted small d-block fw-bold">Fecha de Envío</span>
-                    <span class="font-tabular text-muted">@Model.FechaEnvio.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss")</span>
+                    <span class="font-tabular text-muted">@(Model.FechaEnvio.HasValue ? Model.FechaEnvio.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm:ss") : "Sin transmitir")</span>
                 </div>
 
                 @if (Model.FechaAprobacion.HasValue)

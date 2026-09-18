@@ -49,6 +49,17 @@ public class VentaRepository : IVentaRepository
             .ToListAsync(ct);
     }
 
+    public async Task<Venta?> GetByClaveIdempotenciaAsync(Guid clave, CancellationToken ct = default)
+    {
+        if (clave == Guid.Empty)
+            return null;
+
+        return await _context.Ventas
+            .Include(v => v.Items)
+            .Include(v => v.ElectronicInvoice)
+            .FirstOrDefaultAsync(v => v.ClaveIdempotencia == clave, ct);
+    }
+
     public async Task<Venta> AddAsync(Venta venta, CancellationToken ct = default)
     {
         await _context.Ventas.AddAsync(venta, ct);
@@ -81,6 +92,12 @@ public class CommonRepositories : IProductoRepository, IClienteRepository, IEnte
 
     async Task<IEnumerable<Producto>> IProductoRepository.GetAllActiveAsync(CancellationToken ct) =>
         await _context.Productos.Where(p => p.EstaActivo).OrderBy(p => p.Descripcion).ToListAsync(ct);
+
+    async Task<IEnumerable<Producto>> IProductoRepository.GetByIdsAsync(IEnumerable<int> ids, CancellationToken ct)
+    {
+        var lista = ids.Distinct().ToList();
+        return await _context.Productos.Where(p => lista.Contains(p.Id)).ToListAsync(ct);
+    }
 
     async Task<IEnumerable<Producto>> IProductoRepository.GetAllAsync(CancellationToken ct) =>
         await _context.Productos.OrderBy(p => p.Descripcion).ToListAsync(ct);
