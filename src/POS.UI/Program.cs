@@ -95,7 +95,18 @@ builder.Services.AddSingleton<IXmlSerializer, XmlSerializer>();
 builder.Services.AddSingleton<IXmlValidator, XmlValidator>();
 builder.Services.AddSingleton<IXmlDigitalSigner, XmlDigitalSigner>();
 
-// Cliente HTTP DGII
+// Cliente HTTP DGII. El autenticador (sub-fase 5.2) emite el token Bearer: semilla → firmar con el
+// certificado del emisor → validarsemilla; vigencia 1 h con refresco temprano a los 55 minutos. El
+// cliente lo recibe por DI y renueva el token UNA vez ante 401/403 antes de rendirse.
+// El autenticador es SINGLETON porque guarda la caché del token: un registro transitorio (typed
+// client) la descartaría en cada scope y forzaría re-autenticación en cada envío.
+builder.Services.AddHttpClient("DgiiAutenticacion");
+builder.Services.AddSingleton<IDgiiAuthenticator>(sp => new DgiiAuthenticator(
+    sp.GetRequiredService<IHttpClientFactory>().CreateClient("DgiiAutenticacion"),
+    sp.GetRequiredService<DgiiConfig>(),
+    sp.GetRequiredService<IProveedorCertificadoDigital>(),
+    sp.GetRequiredService<IFirmadorComprobanteECF>(),
+    sp.GetRequiredService<ILogger<DgiiAuthenticator>>()));
 builder.Services.AddHttpClient<IDgiiApiClient, DgiiApiClient>();
 
 // Repositorios

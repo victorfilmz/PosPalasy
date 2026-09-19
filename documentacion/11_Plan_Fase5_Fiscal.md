@@ -127,14 +127,25 @@ esta fase toca la atomicidad de la venta ni la política `ERROR → ESTADO CONSI
 > 5. El documento FIRMADO sigue validando contra el XSD oficial (probado contra `e-CF 32 v.1.0.xsd`)
 >    y el XML firmado queda persistido para trazabilidad fiscal.
 
-### 5.2 — Autenticación DGII: semilla → token (gate G2)
-1. **B3**: `DgiiAuthenticator`: GET semilla → firmar el XML de semilla (mismo signer) → POST
-   `validarsemilla` → token Bearer **caché con expiración 1h (refresco a los 55 min, thread-safe)**;
-   inyección del header en todos los envíos/consultas.
-2. 401/403 → un solo refresco de token y reintento; si persiste, error permanente (credenciales).
-3. Simulador coherente: token simulado sin red.
-4. **Gate G2:** autenticación completa con dobles de transporte (semilla firmada verificable,
-   renovación automática probada), simulador intacto.
+### 5.2 — Autenticación DGII: semilla → token (gate G2) ✅ EJECUTADA
+
+> **Gate G2 — PASS (2026-09-19).** Evidencia: 5 pruebas nuevas con dobles de transporte (sin red),
+> suite completa 256/256, build 0 errores/0 advertencias, arranque real 0 errores.
+>
+> **Diseño implementado:**
+> 1. `DgiiAuthenticator`: GET semilla → firma del XML de semilla con el certificado del emisor
+>    (mismo `FirmadorComprobanteECF`, firma verificable — probado) → POST `validarsemilla` (multipart,
+>    campo `xml`) → token Bearer. Contrato exacto de `KNOWLEDGE_BASE/dgii/api_rest.md`.
+> 2. **Caché thread-safe con doble verificación** bajo candado: vigencia 1 h, refresco temprano a los
+>    55 min (ninguna operación fiscal arranca con un token a menos de 5 min de vencer).
+> 3. `RenovarTokenAsync`: ruta de recuperación ante 401/403 — el cliente DGII adjunta el Bearer en
+>    TODAS las llamadas (envío, consulta, aprobación comercial, anulación) y ante 401/403 renueva el
+>    token UNA vez y reintenta; más de un ciclo lo clasifica el orquestador como error permanente.
+> 4. El autenticador es **singleton en DI** (guarda la caché del token; un registro transitorio la
+>    descartaría por scope y forzaría re-autenticación en cada envío). Sin certificado la
+>    autenticación falla con `CERTIFICADO_AUSENTE` ANTES de pedir la semilla (0 llamadas).
+> 5. El simulador no autentica (no hay red ni token en desarrollo) — el pipeline real queda listo
+>    para homologación al desactivar `DGII:ModoSimulador`.
 
 ### 5.3 — Transmisión real RFCE/e-CF + resultado fiscal (gate G3)
 1. **B4/B5**: realinear `DgiiConfig` a la API documentada (hosts `ecf.`/`fc.` por ambiente

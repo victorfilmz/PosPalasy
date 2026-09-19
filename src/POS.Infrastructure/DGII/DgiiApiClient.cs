@@ -39,10 +39,12 @@ public class DgiiApiClient : IDgiiApiClient
 {
     private readonly HttpClient _httpClient;
     private readonly DgiiConfig _config;
+    private readonly IDgiiAuthenticator? _autenticador;
     private readonly ILogger<DgiiApiClient> _logger;
 
-    public DgiiApiClient(HttpClient httpClient, DgiiConfig config, ILogger<DgiiApiClient> logger)
+    public DgiiApiClient(HttpClient httpClient, DgiiConfig config, ILogger<DgiiApiClient> logger, IDgiiAuthenticator? autenticador = null)
     {
+        _autenticador = autenticador;
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
         _config = config ?? throw new ArgumentNullException(nameof(config));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -77,13 +79,15 @@ public class DgiiApiClient : IDgiiApiClient
         };
 
         var json = JsonSerializer.Serialize(payload);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         _logger.LogInformation("Enviando e-CF a DGII endpoint {Endpoint} con hash {Hash}", _config.RecepcionEndpoint, hash);
 
         try
         {
-            var response = await _httpClient.PostAsync(_config.RecepcionEndpoint, content, ct);
+            var response = await PostConTokenAsync(
+                _config.RecepcionEndpoint,
+                () => new StringContent(json, Encoding.UTF8, "application/json"),
+                ct);
             var responseBody = await response.Content.ReadAsStringAsync(ct);
 
             _logger.LogInformation("Respuesta DGII recepción (HTTP {StatusCode}): {Response}", response.StatusCode, responseBody);
@@ -158,7 +162,7 @@ public class DgiiApiClient : IDgiiApiClient
 
         try
         {
-            var response = await _httpClient.GetAsync(endpoint, ct);
+            var response = await GetConTokenAsync(endpoint, ct);
             var responseBody = await response.Content.ReadAsStringAsync(ct);
 
             string? estado = null;
@@ -196,12 +200,13 @@ public class DgiiApiClient : IDgiiApiClient
     }
 
     public async Task<DgiiApiResponse> EnviarAprobacionComercialAsync(string xmlBase64, string hash, CancellationToken ct = default)
-    {
-        var payload = new { xml = xmlBase64, hash };
+    {        var payload = new { xml = xmlBase64, hash };
         var json = JsonSerializer.Serialize(payload);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
 
-        var response = await _httpClient.PostAsync(_config.AprobacionComercialEndpoint, content, ct);
+        var response = await PostConTokenAsync(
+            _config.AprobacionComercialEndpoint,
+            () => new StringContent(json, Encoding.UTF8, "application/json"),
+            ct);
         var responseBody = await response.Content.ReadAsStringAsync(ct);
 
         return new DgiiApiResponse
@@ -216,13 +221,15 @@ public class DgiiApiClient : IDgiiApiClient
     {
         var payload = new { xml = xmlBase64, hash };
         var json = JsonSerializer.Serialize(payload);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
 
         _logger.LogInformation("Enviando ANECF a DGII endpoint {Endpoint} con hash {Hash}", _config.AnulacionEndpoint, hash);
 
         try
         {
-            var response = await _httpClient.PostAsync(_config.AnulacionEndpoint, content, ct);
+            var response = await PostConTokenAsync(
+                _config.AnulacionEndpoint,
+                () => new StringContent(json, Encoding.UTF8, "application/json"),
+                ct);
             var responseBody = await response.Content.ReadAsStringAsync(ct);
 
             string? trackId = null;
@@ -257,5 +264,51 @@ public class DgiiApiClient : IDgiiApiClient
                 RawResponse = ex.ToString()
             };
         }
+    }
+
+    /// <summary>
+    /// POST autenticado: adjunta el token Bearer vigente y, ante 401/403, renueva el token UNA vez
+    /// y reintenta. Más de un ciclo de renovación indicaría credenciales realmente inválidas: eso
+    /// lo clasifica el servicio orquestador como error permanente.
+    /// </summary>
+    private async Task<HttpResponseMessage> PostConTokenAsync(
+        string endpoint, Func<HttpContent> crearContenido, CancellationToken ct)
+    {
+        var respuesta = await EnviarConTokenAsync(HttpMethod.Post, endpoint, crearContenido(), ct);
+
+        if ((int)respuesta.StatusCode is 401 or 403 && _autenticador != null)
+        {
+            respuesta.Dispose();
+            await _autenticador.RenovarTokenAsync(ct);
+            respuesta = await EnviarConTokenAsync(HttpMethod.Post, endpoint, crearContenido(), ct);
+        }
+
+        return respuesta;
+    }
+
+    private async Task<HttpResponseMessage> GetConTokenAsync(string endpoint, CancellationToken ct)
+    {
+        var respuesta = await EnviarConTokenAsync(HttpMethod.Get, endpoint, contenido: null, ct);
+
+        if ((int)respuesta.StatusCode is 401 or 403 && _autenticador != null)
+        {
+            respuesta.Dispose();
+            await _autenticador.RenovarTokenAsync(ct);
+            respuesta = await EnviarConTokenAsync(HttpMethod.Get, endpoint, contenido: null, ct);
+        }
+
+        return respuesta;
+    }
+
+    private async Task<HttpResponseMessage> EnviarConTokenAsync(
+        HttpMethod metodo, string endpoint, HttpContent? contenido, CancellationToken ct)
+    {
+        using var peticion = new HttpRequestMessage(metodo, endpoint) { Content = contenido };
+
+        var token = _autenticador == null ? null : await _autenticador.ObtenerTokenAsync(ct);
+        if (!string.IsNullOrWhiteSpace(token))
+            peticion.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        return await _httpClient.SendAsync(peticion, ct);
     }
 }
