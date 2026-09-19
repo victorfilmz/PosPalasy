@@ -12,6 +12,7 @@
 > 📁 [09_Concurrencia_eNCF.md](09_Concurrencia_eNCF.md) — **Numeración fiscal bajo concurrencia: medición y solución**
 > 📁 [10_Caja_Devoluciones.md](10_Caja_Devoluciones.md) — **Caja: devoluciones transaccionales, reembolso, trazabilidad, arqueo y cierre**
 > 📁 [11_Plan_Fase5_Fiscal.md](11_Plan_Fase5_Fiscal.md) — **Plan FASE 5 fiscal: XML-DSig, XSD, autenticación DGII, ANECF (gates G0–G5)**
+> 📁 [12_HandOff_Homologacion_DGII.md](12_HandOff_Homologacion_DGII.md) — **Hand-off de homologación: checklist TestECF, certificado, plan de verificación y criterio de éxito**
 > 📁 [README.md](README.md) — Documentación principal y guía de inicio
 >
 > ---
