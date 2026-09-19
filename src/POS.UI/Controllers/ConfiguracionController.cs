@@ -58,8 +58,8 @@ public class ConfiguracionController : Controller
         var dto = new ConfiguracionCertificadoDto
         {
             RutaArchivo = rutaCert,
-            BaseUrlDgii = _dgiiConfig.BaseUrl,
-            AmbienteActual = _dgiiConfig.BaseUrl.Contains("test", StringComparison.OrdinalIgnoreCase) ? "TestECF" : "Produccion"
+            BaseUrlDgii = _dgiiConfig.HostECF(),
+            AmbienteActual = _dgiiConfig.Ambiente.ToString()
         };
 
         if (System.IO.File.Exists(rutaCert))
@@ -167,13 +167,13 @@ public class ConfiguracionController : Controller
     {
         if (ambiente == "Produccion")
         {
-            _dgiiConfig.BaseUrl = "https://dfe.dgii.gov.do";
-            TempData["Mensaje"] = "Ambiente cambiado a DGII Producción (dfe.dgii.gov.do).";
+            _dgiiConfig.Ambiente = POS.Infrastructure.DGII.AmbienteDgii.Produccion;
+            TempData["Mensaje"] = "Ambiente cambiado a DGII Producción (ecf.dgii.gov.do/ecf).";
         }
         else
         {
-            _dgiiConfig.BaseUrl = "https://ecf.dgii.gov.do/testecf";
-            TempData["Mensaje"] = "Ambiente cambiado a DGII Homologación / Certificación (TestECF).";
+            _dgiiConfig.Ambiente = POS.Infrastructure.DGII.AmbienteDgii.TestECF;
+            TempData["Mensaje"] = "Ambiente cambiado a DGII Homologación / Pre-certificación (TestECF).";
         }
 
         return RedirectToAction(nameof(Certificado));
@@ -184,18 +184,18 @@ public class ConfiguracionController : Controller
     public async Task<IActionResult> ProbarConectividad()
     {
         var sw = Stopwatch.StartNew();
+        var url = _dgiiConfig.HostECF();
         try
         {
-            var testUrl = $"{_dgiiConfig.BaseUrl.TrimEnd('/')}/fe/autenticacion/api";
-            using var response = await _httpClient.GetAsync(_dgiiConfig.BaseUrl);
+            using var response = await _httpClient.GetAsync(url);
             sw.Stop();
 
-            TempData["Mensaje"] = $"Conectividad exitosa con DGII ({_dgiiConfig.BaseUrl}). Tiempo de respuesta: {sw.ElapsedMilliseconds} ms. Estado HTTP: {(int)response.StatusCode}";
+            TempData["Mensaje"] = $"Conectividad exitosa con DGII ({url}). Tiempo de respuesta: {sw.ElapsedMilliseconds} ms. Estado HTTP: {(int)response.StatusCode}";
         }
         catch (Exception ex)
         {
             sw.Stop();
-            TempData["Error"] = $"Fallo al conectar con {_dgiiConfig.BaseUrl}: {ex.Message} (Latencia: {sw.ElapsedMilliseconds} ms).";
+            TempData["Error"] = $"Fallo al conectar con {url}: {ex.Message} (Latencia: {sw.ElapsedMilliseconds} ms).";
         }
 
         return RedirectToAction(nameof(Certificado));

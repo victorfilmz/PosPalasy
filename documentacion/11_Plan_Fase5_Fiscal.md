@@ -147,15 +147,30 @@ esta fase toca la atomicidad de la venta ni la política `ERROR → ESTADO CONSI
 > 5. El simulador no autentica (no hay red ni token en desarrollo) — el pipeline real queda listo
 >    para homologación al desactivar `DGII:ModoSimulador`.
 
-### 5.3 — Transmisión real RFCE/e-CF + resultado fiscal (gate G3)
-1. **B4/B5**: realinear `DgiiConfig` a la API documentada (hosts `ecf.`/`fc.` por ambiente
-   testecf/certecf/ecf), **doble ruta por regla de 250k**, multipart con nombre `RNC+eNCF.xml`.
-2. **B6**: modelo de respuesta completa (`codigo`, `mensajes[]`, `secuenciaUtilizada`, `trackId`);
-   mapeo a estados: Aceptado→ConfirmadaEnvio; Aceptado Condicional→ConfirmadaEnvio con marca de
-   observaciones; Rechazado→Rechazado **con mensajes persistidos** (consultables en Facturación).
-3. Consulta de resultado (RFCE y e-CF) integrada a `ConsultarEstadoAsync` existente.
-4. **Gate G3:** E2E simulador cubre los 3 resultados + envío incierto; outbox/lease/intentos
-   intactos (regresión completa); UI muestra el resultado fiscal del comprobante.
+### 5.3 — Transmisión real RFCE/e-CF + resultado fiscal (gate G3) ✅ EJECUTADA
+
+> **Gate G3 — PASS (2026-09-19).** Evidencia: 12 pruebas nuevas (transmisión sobre HTTP falso con
+> captura de URL/contenido + integración del resultado fiscal con SQLite real), suite completa
+> 268/268, build 0 errores/0 advertencias, arranque real 0 errores.
+>
+> **Diseño implementado:**
+> 1. **B4 realineada:** `DgiiConfig` reescrita — ambiente (`TestECF/CertECF/Produccion`) deriva los
+>    hosts oficiales (`ecf.`/`fc.dgii.gov.do`) y TODOS los endpoints (`DgiiEndpoints`); sin rutas
+>    sueltas de configuración (fuente #1 de errores de integración). El token NO es intercambiable:
+>    cada host autentica por separado (`DgiiAuthenticator` con doble caché).
+> 2. **B5 realineada:** envío multipart/form-data con el nombre oficial `RNC+eNCF.xml` y endpoint
+>    por regla de 250k: factura de consumo < 250k → `recepcionfc/api/recepcion/ecf` (RFCE); en caso
+>    contrario (incluye ≥ 250k y tipos no consumo) → `recepcion/api/facturaselectronicas` (e-CF).
+> 3. **B6 realineada:** respuesta fiscal completa (`codigo`, `estado`, `mensajes[]`,
+>    `secuenciaUtilizada`, `trackId`). La recepción RFCE consolida el veredicto EN LA MISMA llamada
+>    (sin TrackId): Aceptado/Aceptado Condicional → Aceptado con `FechaAprobacion`; Rechazado →
+>    `MotivoRechazo` con el texto oficial; la recepción e-CF queda En proceso y se consolida por
+>    la consulta de resultado (`?trackid=`). Toda la traza oficial persiste en el comprobante
+>    (`EstadoDgii`, `MensajesDgii`, `SecuenciaUtilizada`).
+> 4. Consulta RFCE por RNC/eNCF/código de seguridad integrada a `ConsultarEstadoAsync`; ANECF pasa
+>    al endpoint oficial de anulación de rangos (multipart).
+> 5. Configuración realineada (`"DGII:Ambiente": "TestECF"`), pantalla de Certificado muestra el
+>    host e-CF real del ambiente; conectividad contra `ecf.dgii.gov.do/testecf`.
 
 ### 5.4 — ANECF: nota de crédito desde devolución (gate G4)
 1. **B8**: serializer ANECF completo según `ANECF v.1.0.xsd` (datos del comprobante referenciado,

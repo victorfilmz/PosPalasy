@@ -302,6 +302,14 @@ internal sealed class VentasTestHarness : IAsyncDisposable
 /// <summary>Cliente DGII falso: respuestas configurables sin salir a la red.</summary>
 internal sealed class ClienteDgiiFalso : IDgiiApiClient
 {
+    public int EnviosRealizados { get; private set; }
+
+    public string? UltimoNombreArchivo { get; private set; }
+    public bool? UltimaEsFacturaConsumo { get; private set; }
+    public decimal? UltimoMontoTotal { get; private set; }
+    public string? UltimoXmlEnviado { get; private set; }
+
+    /// <summary>Respuesta de la recepción (envío del comprobante).</summary>
     public DgiiApiResponse ProximaRespuesta { get; set; } = new()
     {
         EsExitoso = true,
@@ -311,22 +319,45 @@ internal sealed class ClienteDgiiFalso : IDgiiApiClient
         Mensaje = "Comprobante recibido (prueba)"
     };
 
-    public int EnviosRealizados { get; private set; }
+    /// <summary>Respuesta de la consulta de resultado e-CF (por TrackId).</summary>
+    public DgiiApiResponse RespuestaConsultaEstado { get; set; } = new()
+    {
+        EsExitoso = true,
+        CodigoHttp = 200,
+        TrackId = "TRACK-TEST-0001",
+        Estado = "Aceptado"
+    };
 
-    public Task<DgiiApiResponse> EnviarFacturaAsync(string xmlBase64, string hash, CancellationToken ct = default)
+    /// <summary>Respuesta de la consulta de resumen RFCE (por RNC/eNCF/código).</summary>
+    public DgiiApiResponse RespuestaConsultaRFCE { get; set; } = new()
+    {
+        EsExitoso = true,
+        CodigoHttp = 200,
+        Estado = "Aceptado"
+    };
+
+    public Task<DgiiApiResponse> EnviarFacturaAsync(
+        string xml, string nombreArchivo, bool esFacturaConsumo, decimal montoTotal, CancellationToken ct = default)
     {
         EnviosRealizados++;
+        UltimoXmlEnviado = xml;
+        UltimoNombreArchivo = nombreArchivo;
+        UltimaEsFacturaConsumo = esFacturaConsumo;
+        UltimoMontoTotal = montoTotal;
         return Task.FromResult(ProximaRespuesta);
     }
 
     public Task<DgiiApiResponse> ConsultarEstadoAsync(string trackId, CancellationToken ct = default) =>
+        Task.FromResult(RespuestaConsultaEstado);
+
+    public Task<DgiiApiResponse> EnviarAprobacionComercialAsync(string xml, string nombreArchivo, CancellationToken ct = default) =>
         Task.FromResult(ProximaRespuesta);
 
-    public Task<DgiiApiResponse> EnviarAprobacionComercialAsync(string xmlBase64, string hash, CancellationToken ct = default) =>
+    public Task<DgiiApiResponse> EnviarAnulacionAsync(string xml, string nombreArchivo, CancellationToken ct = default) =>
         Task.FromResult(ProximaRespuesta);
 
-    public Task<DgiiApiResponse> EnviarAnulacionAsync(string xmlBase64, string hash, CancellationToken ct = default) =>
-        Task.FromResult(ProximaRespuesta);
+    public Task<DgiiApiResponse> ConsultarRFCEAsync(string rncEmisor, string encf, string codigoSeguridad, CancellationToken ct = default) =>
+        Task.FromResult(RespuestaConsultaRFCE);
 }
 
 /// <summary>

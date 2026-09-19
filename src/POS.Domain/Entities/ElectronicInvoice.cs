@@ -55,6 +55,18 @@ public class ElectronicInvoice : BaseEntity
     public string XMLHash { get; set; } = string.Empty; // CodigoSeguridadeCF (6 caracteres)
     public string? TrackId { get; set; }
 
+    /// <summary>Último estado fiscal reportado textualmente por la DGII (Aceptado, Aceptado Condicional, Rechazado, En proceso…).</summary>
+    public string? EstadoDgii { get; set; }
+
+    /// <summary>Mensajes de la DGII de la última recepción/resultado (motivos, observaciones); separados por « | ».</summary>
+    public string? MensajesDgii { get; set; }
+
+    /// <summary>
+    /// Marca oficial de la DGII: true = la secuencia del e-NCF NO puede reutilizarse; false = puede
+    /// reutilizarse (rechazo por error correctable). Null mientras la DGII no la haya reportado.
+    /// </summary>
+    public bool? SecuenciaUtilizada { get; set; }
+
     /// <summary>
     /// Estado fiscal según la DGII. Nace como <see cref="EstadoFacturaElectronica.NoEnviado"/>: un
     /// comprobante recién registrado no puede declararse "en proceso" sin haber sido transmitido.

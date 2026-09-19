@@ -36,8 +36,26 @@ internal sealed class HandlerDgiiFalso : HttpMessageHandler
     /// <summary>Número de 401 que el endpoint de negocio responde antes de aceptar.</summary>
     public int Fallos401Pendientes { get; set; }
 
+    /// <summary>Última URL de negocio invocada (recepción, consulta, etc.).</summary>
+    public string? UltimaUrlDeNegocio { get; private set; }
+
+    /// <summary>Content-Type de la última petición de negocio (debe ser multipart/form-data en recepción).</summary>
+    public string? UltimoContentTypeDeNegocio { get; private set; }
+
+    /// <summary>Nombre de archivo contenido en la parte multipart de la última recepción.</summary>
+    public string? UltimoNombreArchivoXml { get; private set; }
+
+    /// <summary>Cuerpo JSON que responde el endpoint de negocio (configurable por prueba).</summary>
+    public string CuerpoDeNegocio { get; set; } = "{\"trackId\":\"TR-1\",\"estado\":\"EnProceso\"}";
+
+    /// <summary>Cuando está activo, toda petición lanza HttpRequestException simulando caída de red (envío incierto).</summary>
+    public bool CaidaDeRed { get; set; }
+
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
+        if (CaidaDeRed)
+            throw new HttpRequestException("No se pudo conectar con el servidor remoto.");
+
         var url = request.RequestUri?.ToString() ?? string.Empty;
 
         if (url.Contains("autenticacion/semilla", StringComparison.OrdinalIgnoreCase))
@@ -68,7 +86,10 @@ internal sealed class HandlerDgiiFalso : HttpMessageHandler
         }
 
         PeticionesAutenticadas++;
-        return RespuestaJson(HttpStatusCode.OK, "{\"trackId\":\"TR-1\",\"estado\":\"EnProceso\"}");
+        UltimaUrlDeNegocio = url;
+        UltimoContentTypeDeNegocio = request.Content?.Headers?.ContentType?.ToString();
+        UltimoNombreArchivoXml = ExtraerNombreArchivoDelMultipart(request);
+        return RespuestaJson(HttpStatusCode.OK, CuerpoDeNegocio);
     }
 
     private static HttpResponseMessage RespuestaXml(HttpStatusCode codigo, string cuerpo) =>
@@ -82,6 +103,25 @@ internal sealed class HandlerDgiiFalso : HttpMessageHandler
         {
             Content = new StringContent(cuerpo, Encoding.UTF8, "application/json")
         };
+
+    /// <summary>Extrae el nombre de archivo de la parte multipart sin dependencias de formatting.</summary>
+    private static string? ExtraerNombreArchivoDelMultipart(HttpRequestMessage request)
+    {
+        var disposicion = request.Content?.Headers?.ContentType?.ToString();
+        if (disposicion == null) return null;
+
+        var crudo = request.Content!.Headers.ContentType!.ToString();
+        // El filename viaja en cada parte; se busca en el encabezado de contenido del cuerpo.
+        // Lectura síncrona del cuerpo para pruebas: el multipart es pequeño.
+        var cuerpo = request.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        var marca = "filename=";
+        var idx = cuerpo.IndexOf(marca, StringComparison.Ordinal);
+        if (idx < 0) return null;
+
+        var resto = cuerpo[(idx + marca.Length)..].TrimStart('"');
+        var fin = resto.IndexOf('"');
+        return fin > 0 ? resto[..fin] : resto.Split(';')[0].Trim();
+    }
 
     /// <summary>Extrae el XML de semilla del cuerpo multipart sin dependencias de formatting.</summary>
     private static async Task<string> ExtraerSemillaDelMultipartAsync(HttpRequestMessage request)
@@ -109,6 +149,14 @@ public class AutenticacionDgiiTests
 {
     private const string Password = "clave-auth";
 
+    /// <summary>Autenticador de prueba: expone el contrato de doble token (uno por host).</summary>
+    internal sealed class AutenticadorFalso : IDgiiAuthenticator
+    {
+        public Task<string> ObtenerTokenAsync(CancellationToken ct = default) => Task.FromResult("TOKEN-ECF");
+        public Task<string> ObtenerTokenRFCEAsync(CancellationToken ct = default) => Task.FromResult("TOKEN-RFCE");
+        public Task<string> RenovarTokenAsync(CancellationToken ct = default) => Task.FromResult("TOKEN-NUEVO");
+    }
+
     private static string CrearPfxTemporal()
     {
         using var rsa = RSA.Create(2048);
@@ -126,12 +174,7 @@ public class AutenticacionDgiiTests
         var handler = new HandlerDgiiFalso();
         var rutaPfx = CrearPfxTemporal();
 
-        var config = new DgiiConfig
-        {
-            BaseUrl = "https://dgii.test",
-            AutenticacionEndpoint = "/autenticacion/api",
-            ModoSimulador = false
-        };
+        var config = new DgiiConfig { Ambiente = AmbienteDgii.TestECF, ModoSimulador = false };
 
         var autenticador = new DgiiAuthenticator(
             new HttpClient(handler),
@@ -203,7 +246,8 @@ public class AutenticacionDgiiTests
             var renovado = await autenticador.RenovarTokenAsync();
 
             Assert.NotEqual(primero, renovado);
-            Assert.Equal(2, handler.SemillasEmitidas);
+            // La renovación re-autentica AMBOS hosts (e-CF y RFCE): sus tokens no son intercambiables.
+            Assert.Equal(3, handler.SemillasEmitidas);
         }
         finally
         {
@@ -217,7 +261,7 @@ public class AutenticacionDgiiTests
         var handler = new HandlerDgiiFalso();
         var autenticador = new DgiiAuthenticator(
             new HttpClient(handler),
-            new DgiiConfig { BaseUrl = "https://dgii.test", AutenticacionEndpoint = "/autenticacion/api" },
+            new DgiiConfig { Ambiente = AmbienteDgii.TestECF },
             new ProveedorCertificadoDigital(
                 Path.Combine(Path.GetTempPath(), "pospalasy-no-existe", "emisor.pfx"), null),
             new FirmadorComprobanteECF(new XmlDigitalSigner()),
@@ -238,27 +282,127 @@ public class AutenticacionDgiiTests
             await autenticador.ObtenerTokenAsync();
             handler.Fallos401Pendientes = 1;
 
-            var config = new DgiiConfig
-            {
-                BaseUrl = "https://dgii.test",
-                RecepcionEndpoint = "/recepcion/ecf",
-                ModoSimulador = false
-            };
+            var config = new DgiiConfig { Ambiente = AmbienteDgii.TestECF, ModoSimulador = false };
             var cliente = new DgiiApiClient(
                 new HttpClient(handler), config,
                 NullLogger<DgiiApiClient>.Instance, autenticador);
 
-            var respuesta = await cliente.EnviarFacturaAsync("eGFwby4=", "A7B3C9");
+            var respuesta = await cliente.EnviarFacturaAsync(
+                "<eCF/>", "13100000001E320000000001.xml", esFacturaConsumo: true, montoTotal: 100m);
 
             // El 401 disparó renovación + reintento: la petición terminó autenticada y exitosa.
             Assert.True(respuesta.EsExitoso, respuesta.Mensaje);
             Assert.Equal(200, respuesta.CodigoHttp);
-            Assert.Equal(2, handler.SemillasEmitidas);      // token inicial + renovación
+            // Semillas: 1 (token e-CF inicial) + 1 (el envío RFCE autentica SU host) + 2 (renovación
+            // de ambos hosts tras el 401). El token de e-CF y el de RFCE son independientes.
+            Assert.Equal(4, handler.SemillasEmitidas);
             Assert.Equal(1, handler.PeticionesAutenticadas); // el reintento pasó
         }
         finally
         {
             File.Delete(rutaPfx);
         }
+    }
+}
+
+/// <summary>
+/// Pruebas de transmisión RFCE/e-CF (FASE 5, sub-fase 5.3): multipart con el nombre de archivo
+/// oficial RNC+eNCF.xml, regla de los RD$250,000, resultado fiscal completo y envío incierto.
+/// </summary>
+public class TransmisionComprobantesTests
+{
+    private static (DgiiApiClient Cliente, HandlerDgiiFalso Handler) CrearCliente(bool simulador = false)
+    {
+        var handler = new HandlerDgiiFalso();
+        var config = new DgiiConfig { Ambiente = AmbienteDgii.TestECF, ModoSimulador = simulador };
+        return (new DgiiApiClient(new HttpClient(handler), config, NullLogger<DgiiApiClient>.Instance, new AutenticacionDgiiTests.AutenticadorFalso()), handler);
+    }
+
+    [Fact]
+    public async Task Regla250k_ConsumoMenorVaAlHostRFCE_YConsumoMayorAlHostECF()
+    {
+        var (cliente, handler) = CrearCliente();
+
+        // Factura de consumo menor: RFCE (fc.dgii.gov.do).
+        await cliente.EnviarFacturaAsync("<eCF/>", "13100000001E320000000001.xml", true, 100_000m);
+        Assert.Contains("fc.dgii.gov.do/testecf/recepcionfc/api/recepcion/ecf", handler.UltimaUrlDeNegocio);
+
+        // Factura de consumo que alcanza el umbral: e-CF completo (ecf.dgii.gov.do).
+        await cliente.EnviarFacturaAsync("<eCF/>", "13100000001E320000000002.xml", true, 250_000m);
+        Assert.Contains("ecf.dgii.gov.do/testecf/recepcion/api/facturaselectronicas", handler.UltimaUrlDeNegocio);
+
+        // Otro tipo de comprobante (crédito fiscal) aunque sea pequeño: SIEMPRE e-CF completo.
+        await cliente.EnviarFacturaAsync("<eCF/>", "13100000001E310000000003.xml", false, 5_000m);
+        Assert.Contains("ecf.dgii.gov.do/testecf/recepcion/api/facturaselectronicas", handler.UltimaUrlDeNegocio);
+    }
+
+    [Fact]
+    public async Task Multipart_LlevaElNombreOficialRncMasEncf()
+    {
+        var (cliente, handler) = CrearCliente();
+
+        await cliente.EnviarFacturaAsync("<eCF/>", "13100000001E310000000001.xml", false, 10m);
+
+        Assert.Equal("multipart/form-data", handler.UltimoContentTypeDeNegocio!.Split(';')[0]);
+        Assert.Equal("13100000001E310000000001.xml", handler.UltimoNombreArchivoXml);
+    }
+
+    [Fact]
+    public async Task ResultadoRFCE_MapeaEstadoCodigoMensajesYSecuencia()
+    {
+        var (cliente, handler) = CrearCliente();
+        handler.CuerpoDeNegocio = "{\"codigo\":2,\"estado\":\"Aceptado Condicional\"," +
+            "\"mensajes\":[{\"codigo\":\"1\",\"valor\":\"El RNC del comprador no existe\"}]," +
+            "\"encf\":\"E320000000001\",\"secuenciaUtilizada\":true}";
+
+        var respuesta = await cliente.EnviarFacturaAsync("<eCF/>", "13100000001E320000000001.xml", true, 100m);
+
+        Assert.True(respuesta.EsExitoso);
+        Assert.Equal("E320000000001", respuesta.eNCF);
+        Assert.Equal("Aceptado Condicional", respuesta.Estado);
+        Assert.True(respuesta.SecuenciaUtilizada);
+        Assert.Contains("El RNC del comprador no existe", respuesta.Mensaje);
+    }
+
+    [Fact]
+    public async Task ResultadoRFCE_RechazadoConSecuenciaReutilizable()
+    {
+        var (cliente, handler) = CrearCliente();
+        handler.CuerpoDeNegocio = "{\"codigo\":3,\"estado\":\"Rechazado\"," +
+            "\"mensajes\":[{\"codigo\":\"9\",\"valor\":\"Error en la firma\"}],\"secuenciaUtilizada\":false}";
+
+        var respuesta = await cliente.EnviarFacturaAsync("<eCF/>", "13100000001E320000000001.xml", true, 100m);
+
+        Assert.True(respuesta.EsExitoso);              // la RECEPCIÓN fue exitosa; el resultado es Rechazado
+        Assert.Equal("Rechazado", respuesta.Estado);
+        Assert.False(respuesta.SecuenciaUtilizada);    // la secuencia puede reutilizarse
+    }
+
+    [Fact]
+    public async Task ConsultaResultadoECF_UsaParametroTrackidYTraeSecuencia()
+    {
+        var (cliente, handler) = CrearCliente();
+        handler.CuerpoDeNegocio = "{\"trackId\":\"TR-9\",\"codigo\":1,\"estado\":\"Aceptado\"," +
+            "\"eNCF\":\"E310000000001\",\"secuenciaUtilizada\":true}";
+
+        var respuesta = await cliente.ConsultarEstadoAsync("TR-9");
+
+        Assert.Contains("consultaresultado/api/consultas/estado?trackid=TR-9", handler.UltimaUrlDeNegocio);
+        Assert.Equal("Aceptado", respuesta.Estado);
+        Assert.Equal("E310000000001", respuesta.eNCF);
+        Assert.True(respuesta.SecuenciaUtilizada);
+    }
+
+    [Fact]
+    public async Task EnvioIncierto_SinRespuestaDelServidor()
+    {
+        var (cliente, handler) = CrearCliente();
+        handler.CaidaDeRed = true;   // la petición no obtiene respuesta alguna: no se sabe si llegó
+
+        var respuesta = await cliente.EnviarFacturaAsync("<eCF/>", "13100000001E310000000001.xml", false, 10m);
+
+        Assert.False(respuesta.EsExitoso);
+        Assert.Equal(0, respuesta.CodigoHttp);         // sin código HTTP: no se sabe si llegó
+        Assert.Contains("conexión", respuesta.Mensaje, StringComparison.OrdinalIgnoreCase);
     }
 }

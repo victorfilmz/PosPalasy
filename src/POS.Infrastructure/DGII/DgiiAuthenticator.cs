@@ -1,6 +1,7 @@
 using System;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,17 +16,29 @@ namespace POS.Infrastructure.DGII;
 /// Contrato de autenticación contra la DGII: semilla → firmar con el certificado del emisor →
 /// token Bearer (vigencia 1 hora según la especificación de la API).
 /// </summary>
+/// <remarks>
+/// La API mantiene tokens SEPARADOS por host (e-CF y RFCE exponen cada uno su propio endpoint de
+/// autenticación): el token de uno no sirve para el otro.
+/// </remarks>
 public interface IDgiiAuthenticator
 {
     /// <summary>
-    /// Devuelve un token vigente, reutilizando el caché mientras sirva (refresco temprano a los
-    /// 55 minutos de vida). Thread-safe: bajo concurrencia, uno autentica y los demás esperan.
+    /// Devuelve un token vigente del host e-CF, reutilizando el caché mientras sirva (refresco
+    /// temprano a los 55 minutos de vida). Thread-safe: bajo concurrencia, uno autentica y los
+    /// demás esperan.
     /// </summary>
     Task<string> ObtenerTokenAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// Invalida el caché y obtiene un token recién emitido. Es la ruta de recuperación cuando la
-    /// DGII responde 401/403: se reintenta UNA vez con el token renovado, no en bucle.
+    /// Devuelve un token vigente del host RFCE (facturas de consumo &lt; RD$250,000), con la misma
+    /// política de caché que el host e-CF.
+    /// </summary>
+    Task<string> ObtenerTokenRFCEAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Invalida el caché de ambos hosts y obtiene tokens recién emitidos. Es la ruta de
+    /// recuperación cuando la DGII responde 401/403: se reintenta UNA vez con el token renovado,
+    /// no en bucle.
     /// </summary>
     Task<string> RenovarTokenAsync(CancellationToken ct = default);
 }
@@ -33,13 +46,13 @@ public interface IDgiiAuthenticator
 /// <summary>
 /// Autenticador de la API REST de la DGII (contrato de <c>api_rest.md</c>):
 /// <list type="bullet">
-/// <item><c>GET /autenticacion/api/autenticacion/semilla</c> → XML <c>SemillaModel</c>.</item>
+/// <item><c>GET {host}/autenticacion/api/autenticacion/semilla</c> → XML <c>SemillaModel</c>.</item>
 /// <item>Firmar el XML de semilla con el certificado digital del emisor (XML-DSig).</item>
-/// <item><c>POST /autenticacion/api/autenticacion/validarsemilla</c> (multipart, campo <c>xml</c>)
-/// → JSON con <c>token</c> y <c>expira</c>.</item>
+/// <item><c>POST {host}/autenticacion/api/autenticacion/validarsemilla</c> (multipart, campo
+/// <c>xml</c>) → JSON con <c>token</c> y <c>expira</c>.</item>
 /// </list>
-/// El token se cachea con margen de refresco temprano: nunca se usa un token que expire en menos de
-/// 5 minutos, de modo que ninguna operación fiscal arranque con credenciales al borde de vencer.
+/// Cada host (e-CF y RFCE) mantiene su propio token en caché. El refresco temprano garantiza que
+/// ninguna operación fiscal arranque con un token a menos de 5 minutos de vencer.
 /// </summary>
 public sealed class DgiiAuthenticator : IDgiiAuthenticator
 {
@@ -56,8 +69,8 @@ public sealed class DgiiAuthenticator : IDgiiAuthenticator
     private readonly ILogger<DgiiAuthenticator> _logger;
     private readonly SemaphoreSlim _cerrojo = new(1, 1);
 
-    private string? _tokenCacheado;
-    private DateTime _expiraUtc = DateTime.MinValue;
+    private readonly TokenEnCache _tokenEcf = new();
+    private readonly TokenEnCache _tokenRfce = new();
 
     public DgiiAuthenticator(
         HttpClient httpClient,
@@ -72,24 +85,46 @@ public sealed class DgiiAuthenticator : IDgiiAuthenticator
         _firmador = firmador ?? throw new ArgumentNullException(nameof(firmador));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
-        if (_httpClient.BaseAddress == null && !string.IsNullOrWhiteSpace(_config.BaseUrl))
-            _httpClient.BaseAddress = new Uri(_config.BaseUrl);
+        // Sin BaseAddress fija: este cliente autentica CONTRA DOS HOSTS (e-CF y RFCE) y cada
+        // llamada lleva su URL absoluta.
     }
 
-    public async Task<string> ObtenerTokenAsync(CancellationToken ct = default)
+    public Task<string> ObtenerTokenAsync(CancellationToken ct = default) =>
+        ObtenerTokenDeAsync(_tokenEcf, EsECF: true, ct);
+
+    public Task<string> ObtenerTokenRFCEAsync(CancellationToken ct = default) =>
+        ObtenerTokenDeAsync(_tokenRfce, EsECF: false, ct);
+
+    public async Task<string> RenovarTokenAsync(CancellationToken ct = default)
+    {
+        // Renueva el par completo: un 401 en una operación de cualquiera de los hosts invalida el
+        // caché del host correspondiente; renovar ambos mantiene simple el contrato del cliente.
+        await _cerrojo.WaitAsync(ct);
+        try
+        {
+            await AutenticarAsync(_tokenEcf, EsECF: true, ct);
+            return await AutenticarAsync(_tokenRfce, EsECF: false, ct);
+        }
+        finally
+        {
+            _cerrojo.Release();
+        }
+    }
+
+    private async Task<string> ObtenerTokenDeAsync(TokenEnCache cache, bool EsECF, CancellationToken ct)
     {
         // Vía rápida sin candado: el token sirve mientras le quede más del margen de refresco.
-        if (_tokenCacheado != null && DateTime.UtcNow < _expiraUtc - RefrescoTemprano)
-            return _tokenCacheado;
+        if (cache.Token != null && DateTime.UtcNow < cache.ExpiraUtc - RefrescoTemprano)
+            return cache.Token;
 
         await _cerrojo.WaitAsync(ct);
         try
         {
             // Doble verificación: otro hilo pudo haber renovado mientras esperábamos el candado.
-            if (_tokenCacheado != null && DateTime.UtcNow < _expiraUtc - RefrescoTemprano)
-                return _tokenCacheado;
+            if (cache.Token != null && DateTime.UtcNow < cache.ExpiraUtc - RefrescoTemprano)
+                return cache.Token;
 
-            return await AutenticarAsync(ct);
+            return await AutenticarAsync(cache, EsECF, ct);
         }
         finally
         {
@@ -97,20 +132,7 @@ public sealed class DgiiAuthenticator : IDgiiAuthenticator
         }
     }
 
-    public async Task<string> RenovarTokenAsync(CancellationToken ct = default)
-    {
-        await _cerrojo.WaitAsync(ct);
-        try
-        {
-            return await AutenticarAsync(ct);
-        }
-        finally
-        {
-            _cerrojo.Release();
-        }
-    }
-
-    private async Task<string> AutenticarAsync(CancellationToken ct)
+    private async Task<string> AutenticarAsync(TokenEnCache cache, bool EsECF, CancellationToken ct)
     {
         var certificado = _proveedorCertificado.ObtenerCertificado()
             ?? throw new ReglaDeNegocioException(
@@ -118,20 +140,22 @@ public sealed class DgiiAuthenticator : IDgiiAuthenticator
                 "certificado del emisor para emitir el token de autenticación. " + _proveedorCertificado.DescribirEstado(),
                 "CERTIFICADO_AUSENTE");
 
-        var semillaXml = await DescargarSemillaAsync(ct);
+        var semillaXml = await DescargarSemillaAsync(EsECF, ct);
         var semillaFirmada = _firmador.Firmar(semillaXml, certificado);
-        var token = await ValidarSemillaAsync(semillaFirmada, ct);
+        var token = await ValidarSemillaAsync(EsECF, semillaFirmada, ct);
 
-        _tokenCacheado = token;
-        _expiraUtc = DateTime.UtcNow.Add(VigenciaToken);
+        cache.Token = token;
+        cache.ExpiraUtc = DateTime.UtcNow.Add(VigenciaToken);
 
-        _logger.LogInformation("Token DGII renovado (vigencia 1 hora, refresco a los 55 minutos).");
+        _logger.LogInformation(
+            "Token DGII renovado para el host {Host} (vigencia 1 hora, refresco a los 55 minutos).",
+            EsECF ? "e-CF" : "RFCE");
         return token;
     }
 
-    private async Task<string> DescargarSemillaAsync(CancellationToken ct)
+    private async Task<string> DescargarSemillaAsync(bool EsECF, CancellationToken ct)
     {
-        var endpoint = $"{_config.AutenticacionEndpoint.TrimEnd('/')}/autenticacion/semilla";
+        var endpoint = EsECF ? _config.Endpoints().SemillaECF : _config.Endpoints().SemillaRFCE;
 
         try
         {
@@ -162,13 +186,13 @@ public sealed class DgiiAuthenticator : IDgiiAuthenticator
         }
     }
 
-    private async Task<string> ValidarSemillaAsync(string semillaFirmada, CancellationToken ct)
+    private async Task<string> ValidarSemillaAsync(bool EsECF, string semillaFirmada, CancellationToken ct)
     {
-        var endpoint = $"{_config.AutenticacionEndpoint.TrimEnd('/')}/autenticacion/validarsemilla";
+        var endpoint = EsECF ? _config.Endpoints().ValidarSemillaECF : _config.Endpoints().ValidarSemillaRFCE;
 
         using var contenido = new MultipartFormDataContent
         {
-            { new StringContent(semillaFirmada, System.Text.Encoding.UTF8, "text/xml"), "xml", "semilla_firmada.xml" }
+            { new StringContent(semillaFirmada, Encoding.UTF8, "text/xml"), "xml", "semilla_firmada.xml" }
         };
 
         try
@@ -201,4 +225,10 @@ public sealed class DgiiAuthenticator : IDgiiAuthenticator
     }
 
     private static string CuerpoOJsonVacio(string cuerpo) => string.IsNullOrWhiteSpace(cuerpo) ? "{}" : cuerpo;
+
+    private sealed class TokenEnCache
+    {
+        public string? Token;
+        public DateTime ExpiraUtc = DateTime.MinValue;
+    }
 }

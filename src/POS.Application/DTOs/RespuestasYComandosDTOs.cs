@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using POS.Domain.Enums;
 using POS.Domain.Types;
 
@@ -34,6 +35,22 @@ public class ElectronicInvoiceResponse
     public string? CodigoSeguridadeCF { get; set; }
     public string? Mensaje { get; set; }
     public DateTime FechaRecepcion { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Estado fiscal emitido por la DGII en la recepción/resultado (Aceptado, Aceptado Condicional,
+    /// Rechazado, En proceso). Es la fuente oficial: puede diferir del estado local consolidado.
+    /// </summary>
+    public string? EstadoDgii { get; set; }
+
+    /// <summary>Mensajes devueltos por la DGII (motivos de rechazo, observaciones, etc.).</summary>
+    public List<string> MensajesDgii { get; set; } = new();
+
+    /// <summary>
+    /// Marca oficial de la DGII: true = la secuencia del e-NCF NO puede reutilizarse; false = la
+    /// secuencia puede reutilizarse (típico tras rechazo por error correctable). Null si la DGII
+    /// no la reportó en esta respuesta.
+    /// </summary>
+    public bool? SecuenciaUtilizada { get; set; }
 }
 
 public class AnulacionResponse
@@ -62,4 +79,14 @@ public class DgiiApiResponse
     public string? Estado { get; set; }
     public string? Mensaje { get; set; }
     public string? RawResponse { get; set; }
+
+    /// <summary>e-NCF confirmado por la DGII en la respuesta.</summary>
+    public string? eNCF { get; set; }
+
+    /// <summary>
+    /// Marca oficial de la DGII: true = la secuencia del e-NCF NO puede reutilizarse; false = la
+    /// secuencia puede reutilizarse (típico tras rechazo por error correctable). Null si la DGII
+    /// no la reportó en esta respuesta.
+    /// </summary>
+    public bool? SecuenciaUtilizada { get; set; }
 }

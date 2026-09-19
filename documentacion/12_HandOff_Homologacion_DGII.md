@@ -18,8 +18,8 @@
 | Firma XML-DSig RSA-SHA256 con verificación previa | ✅ | La firma verifica con el certificado incorporado en el documento; el firmado sigue validando XSD — 5.1 |
 | Certificado en runtime (carga, caché, vigencia, diagnóstico) | ✅ | `ProveedorCertificadoDigital` + pantalla de Configuración ("¿puedo firmar?") |
 | Autenticación semilla → firmar → token Bearer (caché 1h, refresco 55 min) | ✅ | Doble de transporte: la semilla firmada verifica criptográficamente; 401 → renovación + un reintento — 5.2 |
-| Transmisión real RFCE/e-CF según regla de 250k | ⛔ Pendiente | Sub-fase **5.3** (el cliente transmite hoy por endpoint heredado JSON) |
-| Resultado fiscal completo (`codigo`, `mensajes[]`, `secuenciaUtilizada`) | ⛔ Pendiente | Sub-fase **5.3** |
+| Transmisión real RFCE/e-CF según regla de 250k | ✅ Implementada (5.3) | Multipart con nombre oficial `RNC+eNCF.xml`; hosts/rutas oficiales derivados del ambiente (`ecf.`/`fc.dgii.gov.do`). |
+| Resultado fiscal completo (`codigo`, `mensajes[]`, `secuenciaUtilizada`) | ✅ Implementado (5.3) | RFCE consolida el veredicto en la misma recepción; e-CF por consulta de resultado (`?trackid=`); traza persistida en el comprobante. |
 | ANECF (nota de crédito desde devolución) | ⛔ Pendiente | Sub-fase **5.4** |
 | Reutilización de secuencia tras rechazo | ⛔ Pendiente | Sub-fase **5.5** |
 
@@ -46,7 +46,7 @@ Suite actual: **258/258 pruebas** · build 0/0 · arranque real contra SQL Serve
 | Clave | Valor para homologación | Nota |
 |---|---|---|
 | `DGII:ModoSimulador` | **`false`** | Activa firma + autenticación reales. La guarda del sistema impide simulador fuera de Development. |
-| `DGII:BaseUrl` | `https://ecf.dgii.gov.do/testecf` | Punto único de hosts (5.3 realineará ecf./fc. + ambientes). |
+| `DGII:Ambiente` | `TestECF` | Deriva los hosts y rutas oficiales por ambiente (`TestECF`/`CertECF`/`Produccion`); NO se configuran hosts a mano. |
 | `Certificado:RutaCertificado` | `emisor.pfx` (o ruta absoluta) | Resuelto contra el directorio de datos si es relativo. |
 | `Certificado:DirectorioDatos` | (vacío = `%LOCALAPPDATA%\PosPalasy\certificados`) | Fuera del directorio de la app y del contenido web. |
 | `Certificado:Password` | **user-secrets / variable de entorno** | NUNCA en `appsettings.json` ni versionado. |
@@ -96,5 +96,5 @@ ejercitados sin pérdida ni duplicación de comprobantes.
 | Quién | Qué |
 |---|---|
 | **Operación** | Certificado vigente + habilitación del RNC + acceso a testecf + eNCF activas |
-| **Código (FASE 5)** | Sub-fases 5.3 (endpoints reales + regla 250k + resultado fiscal), 5.4 (ANECF), 5.5 (secuencia ante rechazo) antes del primer envío real |
+| **Código (FASE 5)** | Sub-fases 5.4 (ANECF) y 5.5 (secuencia ante rechazo) antes del primer envío real |
 | **Conjunto** | Ejecutar el plan de verificación §4 en testecf; registrar respuestas reales y ajustar contratos si difieren de la KB |

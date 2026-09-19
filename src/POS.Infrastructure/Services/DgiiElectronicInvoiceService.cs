@@ -43,6 +43,12 @@ namespace POS.Infrastructure.Services;
 /// transmitirse (transición a Firmada; ErrorFirma permanente si falta el certificado o la firma no
 /// verifica). En modo simulador se transmite sin firma para no exigir certificado en desarrollo.
 /// </para>
+/// <para>
+/// Transmisión (FASE 5, sub-fase 5.3): multipart con el nombre oficial RNC+eNCF.xml y endpoint
+/// según la regla de los RD$250,000 (e-CF completo en ecf.dgii.gov.do; resumen RFCE en
+/// fc.dgii.gov.do para factura de consumo menor). El resultado fiscal de la DGII (Aceptado,
+/// Aceptado Condicional, Rechazado, mensajes y secuenciaUtilizada) se persiste en el comprobante.
+/// </para>
 /// </remarks>
 public class DgiiElectronicInvoiceService : IElectronicInvoiceService
 {
@@ -389,21 +395,41 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
             await _invoiceRepository.UpdateAsync(invoice, cancellationToken);
         }
 
-        var xmlBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(invoice.XMLContent));
-        var respuesta = await _dgiiApiClient.EnviarFacturaAsync(xmlBase64, invoice.XMLHash, cancellationToken);
+        // Transmisión real (sub-fase 5.3): multipart con el nombre de archivo oficial RNC+eNCF.xml
+        // y endpoint según la regla de los RD$250,000.
+        var respuesta = await _dgiiApiClient.EnviarFacturaAsync(
+            invoice.XMLContent,
+            DgiiApiClient.CrearNombreArchivoXml(invoice.RNCEmisor, invoice.eNCF),
+            invoice.TipoeCF == TipoeCFType.FacturaConsumo,
+            invoice.MontoTotal,
+            cancellationToken);
 
         var recuperable = ClasificadorErroresDGII.EsRecuperable(respuesta.CodigoHttp, respuesta.EsExitoso);
         var incierto = !respuesta.EsExitoso && ClasificadorErroresDGII.EsAmbiguo(respuesta.CodigoHttp);
 
         invoice.UltimoCodigoHttp = respuesta.CodigoHttp;
         invoice.FechaUltimoIntentoEnvio = DateTime.UtcNow;
+        invoice.EstadoDgii = respuesta.Estado;
+        invoice.MensajesDgii = respuesta.Mensaje;
+        invoice.SecuenciaUtilizada = respuesta.SecuenciaUtilizada;
 
         if (respuesta.EsExitoso)
         {
-            invoice.TrackId = respuesta.TrackId;
-            invoice.Estado = EstadoFacturaElectronica.EnProceso;
             invoice.FechaEnvio = DateTime.UtcNow;
-            AvanzarEstado(invoice, EstadoEmisionECF.ConfirmadaEnvio);
+            if (EsRFCE(invoice))
+            {
+                // La recepción RFCE entrega el RESULTADO FISCAL definitivo en la misma respuesta
+                // (Aceptado / Aceptado Condicional / Rechazado): se consolida de inmediato.
+                ConsolidarEstadoFiscal(invoice, respuesta);
+            }
+            else
+            {
+                // La recepción e-CF entrega TrackId con estado "En proceso": el resultado fiscal
+                // llega por la consulta de resultado (polling con ConsultarEstadoPorTrackIdAsync).
+                invoice.TrackId = respuesta.TrackId;
+                invoice.Estado = EstadoFacturaElectronica.EnProceso;
+                AvanzarEstado(invoice, EstadoEmisionECF.ConfirmadaEnvio);
+            }
         }
         else if (incierto)
         {
@@ -521,10 +547,12 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
         // 1. Serializar XML de Anulación (ANECF)
         var xml = _xmlSerializer.SerializeAnulacion(request);
         var hash = _hashGenerator.Generate(xml);
-        var xmlBase64 = Convert.ToBase64String(Encoding.UTF8.GetBytes(xml));
 
-        // 2. Enviar a DGII vía REST JSON
-        var dgiiResp = await _dgiiApiClient.EnviarAnulacionAsync(xmlBase64, hash, cancellationToken);
+        // 2. Enviar a DGII: multipart con el nombre oficial RNC+eNCF.xml al endpoint de anulación de rangos
+        var dgiiResp = await _dgiiApiClient.EnviarAnulacionAsync(
+            xml,
+            DgiiApiClient.CrearNombreArchivoXml(request.RNCEmisor, request.eNCFDesde),
+            cancellationToken);
 
         // 3. Persistir registro de Anulación
         var anulacionEntity = new Anulacion
@@ -579,6 +607,13 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
             };
         }
 
+        // RFCE: la DGII no emitió TrackId; la consulta se hace por RNC/eNCF/código de seguridad.
+        if (EsRFCE(invoice) && !string.IsNullOrWhiteSpace(invoice.TrackId) && invoice.Estado == EstadoFacturaElectronica.EnProceso)
+        {
+            return await ConsultarRFCEAsync(invoice, cancellationToken);
+        }
+
+        // e-CF: la consulta de resultado es por TrackId.
         if (!string.IsNullOrWhiteSpace(invoice.TrackId) && invoice.Estado == EstadoFacturaElectronica.EnProceso)
         {
             return await ConsultarEstadoPorTrackIdAsync(invoice.TrackId, cancellationToken);
@@ -604,10 +639,17 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
             var nuevoEstado = dgiiResp.Estado.ToUpperInvariant() switch
             {
                 "ACEPTADO" or "1" => EstadoFacturaElectronica.Aceptado,
+                "ACEPTADO CONDICIONAL" => EstadoFacturaElectronica.Aceptado,
                 "RECHAZADO" or "2" => EstadoFacturaElectronica.Rechazado,
                 "ANULADO" or "3" => EstadoFacturaElectronica.Anulado,
                 _ => EstadoFacturaElectronica.EnProceso
             };
+
+            // Traza del resultado oficial tal como lo reportó la DGII.
+            invoice.EstadoDgii = dgiiResp.Estado;
+            invoice.SecuenciaUtilizada = dgiiResp.SecuenciaUtilizada;
+            if (!string.IsNullOrWhiteSpace(dgiiResp.Mensaje))
+                invoice.MensajesDgii = dgiiResp.Mensaje;
 
             invoice.Estado = nuevoEstado;
             if (nuevoEstado == EstadoFacturaElectronica.Aceptado)
@@ -626,6 +668,55 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
             eNCF = invoice?.eNCF ?? string.Empty,
             TrackId = trackId,
             Estado = invoice?.Estado ?? EstadoFacturaElectronica.EnProceso,
+            MensajeDGII = dgiiResp.Mensaje
+        };
+    }
+
+    /// <summary>
+    /// Consulta el resumen RFCE de un comprobante de consumo (&lt; RD$250,000) por RNC emisor,
+    /// e-NCF y código de seguridad, y consolida el resultado oficial (0=No encontrado, 1=Aceptado,
+    /// 2=Rechazado).
+    /// </summary>
+    private async Task<EstadoFacturaResponse> ConsultarRFCEAsync(
+        ElectronicInvoice invoice, CancellationToken cancellationToken)
+    {
+        var dgiiResp = await _dgiiApiClient.ConsultarRFCEAsync(
+            invoice.RNCEmisor,
+            invoice.eNCF,
+            invoice.XMLHash,
+            cancellationToken);
+
+        if (dgiiResp.EsExitoso && !string.IsNullOrWhiteSpace(dgiiResp.Estado))
+        {
+            var nuevoEstado = dgiiResp.Estado.ToUpperInvariant() switch
+            {
+                "ACEPTADO" or "1" => EstadoFacturaElectronica.Aceptado,
+                "ACEPTADO CONDICIONAL" => EstadoFacturaElectronica.Aceptado,
+                "RECHAZADO" or "2" => EstadoFacturaElectronica.Rechazado,
+                _ => EstadoFacturaElectronica.EnProceso
+            };
+
+            invoice.EstadoDgii = dgiiResp.Estado;
+            invoice.SecuenciaUtilizada = dgiiResp.SecuenciaUtilizada;
+            if (!string.IsNullOrWhiteSpace(dgiiResp.Mensaje))
+                invoice.MensajesDgii = dgiiResp.Mensaje;
+
+            invoice.Estado = nuevoEstado;
+            if (nuevoEstado == EstadoFacturaElectronica.Aceptado)
+            {
+                invoice.FechaAprobacion = DateTime.UtcNow;
+                if (invoice.EstadoEmision.PuedeTransicionarA(EstadoEmisionECF.ConfirmadaEnvio))
+                    invoice.EstadoEmision = EstadoEmisionECF.ConfirmadaEnvio;
+            }
+
+            await _invoiceRepository.UpdateAsync(invoice, cancellationToken);
+        }
+
+        return new EstadoFacturaResponse
+        {
+            eNCF = invoice.eNCF,
+            TrackId = null,
+            Estado = invoice.Estado,
             MensajeDGII = dgiiResp.Mensaje
         };
     }
@@ -650,6 +741,51 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
 
         return await EnviarAsync(invoice.Id, cancellationToken);
     }
+
+    /// <summary>
+    /// La recepción RFCE (facturas de consumo &lt; RD$250,000) responde con el resultado fiscal
+    /// definitivo en la misma llamada, sin TrackId.
+    /// </summary>
+    private static bool EsRFCE(ElectronicInvoice invoice) =>
+        invoice.TipoeCF == TipoeCFType.FacturaConsumo && invoice.MontoTotal < DgiiApiClient.UmbralECF;
+
+    /// <summary>
+    /// Consolida el resultado fiscal de la DGII en el estado local: Aceptado (1), Aceptado
+    /// Condicional (2), Rechazado (3). Solo afecta comprobantes con recepción exitosa; los fallos
+    /// de transporte se tratan por la clasificación HTTP habitual.
+    /// </summary>
+    private void ConsolidarEstadoFiscal(ElectronicInvoice invoice, DgiiApiResponse respuesta)
+    {
+        switch ((respuesta.Estado ?? string.Empty).Trim().ToLowerInvariant())
+        {
+            case "aceptado":
+            case "aceptado condicional":
+                // Ambos tienen validez fiscal; el condicional trae observaciones en los mensajes.
+                invoice.Estado = EstadoFacturaElectronica.Aceptado;
+                invoice.FechaAprobacion = DateTime.UtcNow;
+                break;
+
+            case "rechazado":
+                invoice.Estado = EstadoFacturaElectronica.Rechazado;
+                invoice.MotivoRechazo = respuesta.Mensaje;
+                break;
+
+            default:
+                // Respuesta sin estado reconocible: queda como recibida y en proceso de verificación.
+                invoice.Estado = EstadoFacturaElectronica.EnProceso;
+                break;
+        }
+
+        AvanzarEstado(invoice, EstadoEmisionECF.ConfirmadaEnvio);
+    }
+
+    /// <summary>Traduce el código de estado de la consulta RFCE (0/1/2) a texto oficial.</summary>
+    private static string EstadoFiscalDeConsultaRFCE(int codigo) => codigo switch
+    {
+        1 => "Aceptado",
+        2 => "Rechazado",
+        _ => "No encontrado"
+    };
 
     /// <summary>
     /// Detecta si el XML ya contiene una firma XML-DSig REAL (elemento con contenido). El hueco

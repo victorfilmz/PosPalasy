@@ -93,6 +93,37 @@
                     <code class="fs-6 text-dark font-monospace">@(string.IsNullOrEmpty(Model.TrackId) ? "No asignado (Offline)" : Model.TrackId)</code>
                 </div>
 
+                @if (!string.IsNullOrEmpty(Model.EstadoDgii))
+                {
+                    <div class="mb-3">
+                        <span class="text-muted small d-block fw-bold">Estado Reportado por la DGII</span>
+                        <span class="fs-6 fw-bold">@Model.EstadoDgii</span>
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(Model.MensajesDgii))
+                {
+                    <div class="mb-3">
+                        <span class="text-muted small d-block fw-bold">Mensajes de la DGII</span>
+                        <span class="small text-dark">@Model.MensajesDgii</span>
+                    </div>
+                }
+
+                @if (Model.SecuenciaUtilizada.HasValue)
+                {
+                    <div class="mb-3">
+                        <span class="text-muted small d-block fw-bold">Secuencia del e-NCF</span>
+                        @if (Model.SecuenciaUtilizada.Value)
+                        {
+                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">Consumida (no reutilizable)</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">Puede reutilizarse</span>
+                        }
+                    </div>
+                }
+
                 <div class="mb-3">
                     <span class="text-muted small d-block fw-bold">Código de Seguridad (Hash 6 chars)</span>
                     <code class="fs-5 text-primary fw-bold font-monospace">@Model.XMLHash</code>
