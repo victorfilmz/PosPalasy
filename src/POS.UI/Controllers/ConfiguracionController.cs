@@ -13,6 +13,7 @@ using POS.Domain.Entities;
 using POS.Domain.Enums;
 using POS.Domain.Repositories;
 using POS.Infrastructure.DGII;
+using POS.Infrastructure.Services;
 using POS.UI.Security;
 
 namespace POS.UI.Controllers;
@@ -30,19 +31,22 @@ public class ConfiguracionController : Controller
     private readonly IEnterpriseRepository _enterpriseRepo;
     private readonly IAuditoriaRepository _auditoriaRepo;
     private readonly HttpClient _httpClient;
+    private readonly IProveedorCertificadoDigital _proveedorCertificado;
 
     public ConfiguracionController(
         IConfiguration configuration,
         DgiiConfig dgiiConfig,
         IEnterpriseRepository enterpriseRepo,
         IAuditoriaRepository auditoriaRepo,
-        HttpClient httpClient)
+        HttpClient httpClient,
+        IProveedorCertificadoDigital proveedorCertificado)
     {
         _configuration = configuration;
         _dgiiConfig = dgiiConfig;
         _enterpriseRepo = enterpriseRepo;
         _auditoriaRepo = auditoriaRepo;
         _httpClient = httpClient;
+        _proveedorCertificado = proveedorCertificado;
     }
 
     [HttpGet]
@@ -78,6 +82,24 @@ public class ConfiguracionController : Controller
                 dto.ErrorCarga = $"No se pudo abrir el certificado: {ex.Message} (Verifique la contraseña).";
             }
         }
+
+        // Diagnóstico operativo con el MISMO proveedor que usa la firma (fase 5.1) y la
+        // autenticación (5.2): si este dice que no hay certificado utilizable, la venta en modo
+        // real dejará los comprobantes en cola. El usuario debe verlo antes de vender.
+        try
+        {
+            dto.PuedeFirmar = _proveedorCertificado.ObtenerCertificado() != null;
+        }
+        catch (System.Security.Cryptography.CryptographicException)
+        {
+            dto.PuedeFirmar = false;    // contraseña errónea o archivo corrupto
+        }
+        catch (POS.Domain.Common.ReglaDeNegocioException)
+        {
+            dto.PuedeFirmar = false;    // sin clave privada o vencido
+        }
+
+        dto.DiagnosticoOperativo = _proveedorCertificado.DescribirEstado();
 
         var enterprise = await _enterpriseRepo.GetDefaultAsync();
         ViewBag.Enterprise = enterprise;

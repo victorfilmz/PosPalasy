@@ -29,10 +29,16 @@
         <div class="card border-0 shadow-sm rounded-4 h-100 bg-white overflow-hidden">
             <div class="card-header bg-white py-3 px-4 border-bottom d-flex justify-content-between align-items-center">
                 <h6 class="fw-bold mb-0 text-slate-800"><i class="bi bi-shield-lock me-2 text-primary"></i>Estado del Certificado Digital X.509</h6>
-                @if (Model.TieneCertificado && Model.EstaVigente)
+                @if (Model.TieneCertificado && Model.EstaVigente && Model.PuedeFirmar)
                 {
                     <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-1 font-tabular">
                         <i class="bi bi-check-circle me-1"></i>Válido y Activo
+                    </span>
+                }
+                else if (Model.TieneCertificado && Model.EstaVigente && !Model.PuedeFirmar)
+                {
+                    <span class="badge bg-warning-subtle text-dark border border-warning-subtle px-3 py-1 font-tabular">
+                        <i class="bi bi-exclamation-triangle me-1"></i>No Puede Firmar
                     </span>
                 }
                 else if (Model.TieneCertificado && !Model.EstaVigente)
@@ -51,6 +57,13 @@
             <div class="card-body p-4">
                 @if (Model.TieneCertificado && string.IsNullOrEmpty(Model.ErrorCarga))
                 {
+                    <div class="alert @(Model.PuedeFirmar ? "alert-success" : "alert-warning") small mb-3 d-flex align-items-start gap-2">
+                        <i class="bi @(Model.PuedeFirmar ? "bi-patch-check-fill" : "bi-patch-exclamation-fill") fs-5"></i>
+                        <div>
+                            <strong>@(Model.PuedeFirmar ? "El sistema puede firmar comprobantes." : "El sistema NO puede firmar comprobantes con este certificado.")</strong>
+                            <div class="text-muted">@Model.DiagnosticoOperativo</div>
+                        </div>
+                    </div>
                     <div class="row g-3">
                         <div class="col-12">
                             <label class="text-muted small d-block fw-bold">Titular / Sujeto del Certificado (CN / RNC)</label>
@@ -95,6 +108,13 @@
                         {
                             <div class="alert alert-danger small mt-3 text-start">
                                 @Model.ErrorCarga
+                            </div>
+                        }
+                        @if (!string.IsNullOrEmpty(Model.DiagnosticoOperativo))
+                        {
+                            <div class="alert alert-danger small mt-3 text-start">
+                                <strong>El sistema NO puede firmar comprobantes.</strong>
+                                <div class="text-muted">@Model.DiagnosticoOperativo</div>
                             </div>
                         }
                     </div>

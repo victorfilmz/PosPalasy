@@ -19,6 +19,11 @@ public class ConfiguracionCertificadoDto
     public int DiasRestantes { get; set; }
     public string? ErrorCarga { get; set; }
 
+    // Diagnóstico operativo (FASE 5.1/5.2): la pregunta que el usuario necesita responder ANTES de
+    // vender en modo real es si el sistema puede firmar comprobantes con este certificado.
+    public bool PuedeFirmar { get; set; }
+    public string DiagnosticoOperativo { get; set; } = string.Empty;
+
     // Parámetros de Ambiente DGII
     public string AmbienteActual { get; set; } = "TestECF"; // "TestECF" o "Produccion"
     public string BaseUrlDgii { get; set; } = "https://ecf.dgii.gov.do/testecf";
