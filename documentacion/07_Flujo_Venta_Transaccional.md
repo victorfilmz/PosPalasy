@@ -378,10 +378,12 @@ nunca hay dos trabajadores sobre el mismo comprobante.
 
 1. **`Enterprise.PermitirVentaSinStock` nace en `true`** (y el DDL usa `DEFAULT 1`): el sistema permite
    vender sin existencias de fábrica. Decidir la política y alinear el valor por defecto. *(FASE 3)*
-2. ~~Validación XSD y firma XML-DSig no integradas~~ **Validación XSD resuelta en FASE 5.0**: el
-   comprobante se valida contra el XSD oficial de SU tipo (mapa 31–47) dentro de la construcción;
-   el documento nace con el hueco estructural `ds:Signature` que el estándar exige. La **firma
-   XML-DSig real** (llenar ese hueco con la firma del certificado) sigue pendiente. *(FASE 5.1)*
+2. ~~Validación XSD y firma XML-DSig no integradas~~ **Resuelto en FASE 5.0/5.1**: el comprobante
+   se valida contra el XSD oficial de SU tipo (mapa 31–47) dentro de la construcción; el documento
+   nace con el hueco estructural `ds:Signature` que el estándar exige y en modo real se firma con
+   XML-DSig (RSA-SHA256) justo antes de transmitirse, verificando la firma criptográficamente antes
+   de salir a la red (`Firmada`). Sin certificado válido no hay envío: el comprobante vuelve a la
+   cola y sale solo cuando se instale. *(FASE 5.1)*
 3. **ANECF incompatible con `ANECF v.1.0.xsd`** y código de seguridad calculado fuera del XML. *(FASE 5)*
 4. **Concurrencia validada sobre SQLite**: falta la prueba de carga sobre SQL Server con bloqueo real. *(FASE 3)*
 5. **Sin migraciones EF Core**: el esquema se mantiene con DDL idempotente en `DbInitializer`. *(FASE 12)*

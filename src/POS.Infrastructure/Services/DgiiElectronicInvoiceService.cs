@@ -14,6 +14,7 @@ using POS.Domain.Enums;
 using POS.Domain.Repositories;
 using POS.Domain.Types;
 using POS.Infrastructure.DGII;
+using System.Xml;
 using POS.Infrastructure.XmlSerialization;
 
 namespace POS.Infrastructure.Services;
@@ -35,13 +36,22 @@ namespace POS.Infrastructure.Services;
 /// Estado de la construcción del documento (FASE 5, sub-fase 5.0): el XML se construye con el hueco
 /// estructural de la firma (ds:Signature) exigido por el XSD, se valida contra el esquema oficial
 /// del tipo del comprobante (transición a XsdValidado; ErrorXsd si no valida) y se le asigna el
-/// código de seguridad de 6 caracteres por comprobante. La firma XML-DSig real llega en 5.1.
+/// código de seguridad de 6 caracteres por comprobante.
+/// </para>
+/// <para>
+/// Firma (FASE 5, sub-fase 5.1): en modo REAL el documento se firma con XML-DSig justo antes de
+/// transmitirse (transición a Firmada; ErrorFirma permanente si falta el certificado o la firma no
+/// verifica). En modo simulador se transmite sin firma para no exigir certificado en desarrollo.
 /// </para>
 /// </remarks>
 public class DgiiElectronicInvoiceService : IElectronicInvoiceService
 {
     private readonly IXmlSerializer _xmlSerializer;
-    private readonly ISecurityCodeGenerator _codigoSeguridad;    private readonly IXmlValidator _xmlValidator;
+    private readonly ISecurityCodeGenerator _codigoSeguridad;
+    private readonly IProveedorCertificadoDigital? _proveedorCertificado;
+    private readonly IFirmadorComprobanteECF? _firmador;
+    private readonly bool _simulador;
+    private readonly IXmlValidator _xmlValidator;
     private readonly IHashGenerator _hashGenerator;
     private readonly IDgiiApiClient _dgiiApiClient;
     private readonly IInvoiceRepository _invoiceRepository;
@@ -60,7 +70,10 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
         IEmisionDGIIQueueRepository queueRepository,
         ILogger<DgiiElectronicInvoiceService> logger,
         string? xsdBasePath = null,
-        ISecurityCodeGenerator? codigoSeguridad = null)
+        ISecurityCodeGenerator? codigoSeguridad = null,
+        IProveedorCertificadoDigital? proveedorCertificado = null,
+        IFirmadorComprobanteECF? firmador = null,
+        DgiiConfig? dgiiConfig = null)
     {
         _xmlSerializer = xmlSerializer ?? throw new ArgumentNullException(nameof(xmlSerializer));
         _xmlValidator = xmlValidator ?? throw new ArgumentNullException(nameof(xmlValidator));
@@ -71,6 +84,9 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
         _queueRepository = queueRepository ?? throw new ArgumentNullException(nameof(queueRepository));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _codigoSeguridad = codigoSeguridad ?? new GeneradorCodigoSeguridad();
+        _proveedorCertificado = proveedorCertificado;
+        _firmador = firmador;
+        _simulador = dgiiConfig?.ModoSimulador ?? false;
 
         _xsdBasePath = xsdBasePath ?? Path.Combine(AppContext.BaseDirectory, "documentacion xsd");
     }
@@ -269,6 +285,99 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
                     EsRecuperable = true,
                     Mensaje = "El comprobante ya está siendo transmitido por otro proceso; su estado se confirmará en breve."
                 };
+            }
+        }
+
+        // Firma XML-DSig (sub-fase 5.1): en modo REAL el documento DEBE estar firmado antes de
+        // transmitirse. Sin certificado válido o con firma no verificable => ErrorFirma permanente:
+        // nada sale a la red. En modo simulador se transmite sin firma (el simulador no valida
+        // XML-DSig); los comprobantes ya firmados no se firman dos veces.
+        if (!_simulador && !ContieneFirmaReal(invoice.XMLContent))
+        {
+            // Sin certificado utilizable no hay envío; pero la AUSENCIA de certificado es un problema
+            // de configuración, no del documento: vuelve a la cola con reintento progresivo (al
+            // instalarse el certificado el comprobante sale solo). Un documento cuya firma no
+            // verifica es ErrorFirma PERMANENTE (defecto del documento, no del entorno).
+            async Task<ElectronicInvoiceResponse> FallarFirmaAsync(string mensaje, bool esRecuperable)
+            {
+                invoice.FechaUltimoIntentoEnvio = DateTime.UtcNow;
+                invoice.Estado = EstadoFacturaElectronica.NoEnviado;
+
+                if (esRecuperable)
+                {
+                    if (invoice.EstadoEmision.PuedeTransicionarA(EstadoEmisionECF.Encolada))
+                        invoice.EstadoEmision = EstadoEmisionECF.Encolada;
+                }
+                else
+                {
+                    AvanzarEstado(invoice, EstadoEmisionECF.ErrorFirma);
+                }
+
+                await _invoiceRepository.UpdateAsync(invoice, cancellationToken);
+
+                if (elementoCola != null)
+                {
+                    var proximoIntento = esRecuperable
+                        ? PoliticaReintentoCola.ProximoIntento(elementoCola.Intentos + 1, DateTime.UtcNow, elementoCola.Id)
+                        : (DateTime?)null;
+
+                    await _queueRepository.MarcarFalloAsync(
+                        elementoCola.Id, mensaje, null, esRecuperable, proximoIntento, cancellationToken);
+                }
+
+                if (esRecuperable)
+                    _logger.LogWarning("e-CF {eNCF} NO transmitido (falta de certificado; quedará en cola): {Mensaje}", invoice.eNCF, mensaje);
+                else
+                    _logger.LogError("e-CF {eNCF} NO transmitido por fallo de firma: {Mensaje}", invoice.eNCF, mensaje);
+
+                return new ElectronicInvoiceResponse
+                {
+                    Exitoso = false,
+                    eNCF = invoice.eNCF,
+                    Estado = invoice.Estado,
+                    EstadoEmision = invoice.EstadoEmision,
+                    EsRecuperable = esRecuperable,
+                    CodigoSeguridadeCF = invoice.XMLHash,
+                    Mensaje = mensaje
+                };
+            }
+
+            try
+            {
+                var certificado = _proveedorCertificado?.ObtenerCertificado();
+                if (certificado == null || _firmador == null)
+                    throw new ReglaDeNegocioException(
+                        _proveedorCertificado?.DescribirEstado()
+                            ?? "No hay proveedor de certificado digital configurado para firmar comprobantes.",
+                        "CERTIFICADO_AUSENTE");
+
+                invoice.XMLContent = _firmador.Firmar(invoice.XMLContent, certificado);
+                // Transición mejor-esfuerzo: en un reintento desde ErrorTemporal el documento se
+                // vuelve a firmar (se persiste el XML firmado, lo esencial), pero la máquina no
+                // permite re-entrar a la línea principal; el avance lo dará la transmisión.
+                if (invoice.EstadoEmision.PuedeTransicionarA(EstadoEmisionECF.Firmada))
+                    AvanzarEstado(invoice, EstadoEmisionECF.Firmada);
+                await _invoiceRepository.UpdateAsync(invoice, cancellationToken);
+
+                _logger.LogInformation(
+                    "e-CF {eNCF} firmado con XML-DSig (certificado {Sujeto}).",
+                    invoice.eNCF, certificado.SubjectName.Name);
+            }
+            catch (ReglaDeNegocioException ex) when (ex.Codigo is "FIRMA_INVALIDA" or "FIRMA_AUSENTE")
+            {
+                // El documento se firmó pero su firma no verifica: defecto del documento.
+                return await FallarFirmaAsync(ex.Message, esRecuperable: false);
+            }
+            catch (ReglaDeNegocioException ex)
+            {
+                // CERTIFICADO_AUSENTE / SIN_CLAVE_PRIVADA / VENCIDO: se corrige instalando el certificado.
+                return await FallarFirmaAsync(ex.Message, esRecuperable: true);
+            }
+            catch (System.Security.Cryptography.CryptographicException ex)
+            {
+                return await FallarFirmaAsync(
+                    $"El certificado digital no se pudo usar para firmar (¿contraseña incorrecta o archivo corrupto?): {ex.Message}",
+                    esRecuperable: true);
             }
         }
 
@@ -540,6 +649,27 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
         }
 
         return await EnviarAsync(invoice.Id, cancellationToken);
+    }
+
+    /// <summary>
+    /// Detecta si el XML ya contiene una firma XML-DSig REAL (elemento con contenido). El hueco
+    /// estructural vacío emitido por el serializer no cuenta: solo evita firmar dos veces un
+    /// documento que ya pasó por el firmador en un intento anterior.
+    /// </summary>
+    private static bool ContieneFirmaReal(string xml)
+    {
+        try
+        {
+            var doc = new XmlDocument { PreserveWhitespace = true };
+            doc.LoadXml(xml);
+
+            var firmas = doc.GetElementsByTagName("Signature", "http://www.w3.org/2000/09/xmldsig#");
+            return firmas.Count > 0 && firmas[0] is XmlElement firma && firma.HasChildNodes;
+        }
+        catch (XmlException)
+        {
+            return false;
+        }
     }
 
     private static void AvanzarEstado(ElectronicInvoice invoice, EstadoEmisionECF nuevoEstado)

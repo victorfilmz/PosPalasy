@@ -207,7 +207,8 @@ internal sealed class VentasTestHarness : IAsyncDisposable
             new InvoiceRepository(contexto),
             new CommonRepositories(contexto),
             new EmisionDGIIQueueRepository(contexto),
-            NullLogger<DgiiElectronicInvoiceService>.Instance);
+            NullLogger<DgiiElectronicInvoiceService>.Instance,
+            dgiiConfig: new DgiiConfig { ModoSimulador = true });
 
     /// <summary>Comando de venta con la clave de idempotencia indicada.</summary>
     public ProcesarVentaCommand CrearComando(

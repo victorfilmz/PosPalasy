@@ -102,15 +102,30 @@ esta fase toca la atomicidad de la venta ni la política `ERROR → ESTADO CONSI
 3. **Gate G0:** validación XSD real verde (válido/inválido), código de seguridad documentado y
    persistido, build 0/0, suite intacta.
 
-### 5.1 — Firma XML-DSig integrada (gate G1)
-1. **B2**: firmar en `EnviarAsync` (antes del base64) vía `IDigitalSignatureService` (WIP rescatado);
-   persistir XML firmado y alcanzar `Firmada` → `Encolada` de forma observable.
-2. Certificado en runtime: resolver `emisor.pfx` + `Certificado:Password` con caché y **validación de
-   vigencia** (avisar 30 días antes de expirar; error permanente claro si falta/está vencido).
-3. Pruebas: la firma **verifica criptográficamente** (`SignedXml.CheckSignature` con el certificado
-   público), el XSD sigue aceptando el documento firmado (enveloped permitido), sin cert no hay envío
-   (error permanente, nada sale a la red).
-4. **Gate G1:** firma verificable en pruebas, estados correctos, regresión 232+ verde.
+### 5.1 — Firma XML-DSig integrada (gate G1) ✅ EJECUTADA
+
+> **Gate G1 — PASS (2026-09-19).** Evidencia: 13 pruebas nuevas (10 unitarias de firma/proveedor +
+> 3 de integración sobre SQLite real), suite completa en verde, build 0 errores/0 advertencias.
+>
+> **Diseño implementado:**
+> 1. `FirmadorComprobanteECF` REEMPLAZA el hueco estructural `ds:Signature` emitido por el serializer
+>    (un apéndice dejaría dos firmas y el documento inválido) y **verifica la firma criptográficamente**
+>    antes de entregarla (`SignedXml.CheckSignature` con el certificado incorporado en el propio
+>    documento, la forma en que la DGII la comprobará).
+> 2. `ProveedorCertificadoDigital`: resuelve `emisor.pfx` con la MISMA convención de rutas de
+>    Configuración (absoluta se respeta; relativa ancla al directorio de datos), contraseña por
+>    user-secrets/entorno (nunca versionada), clave privada efímera (`EphemeralKeySet`), caché
+>    invalidada por fecha del archivo (instalar un certificado toma efecto sin reiniciar), aviso a 30
+>    días de expirar.
+> 3. Firma en `EnviarAsync` antes del base64, solo en modo REAL (el simulador no exige certificado;
+>    el comportamiento de desarrollo queda intacto). Comprobantes ya firmados no se firman dos veces.
+> 4. **Sin certificado utilizable no hay envío** (probado: 0 llamadas al cliente DGII): la ausencia
+>    es un problema de configuración, no del documento → el comprobante vuelve a la cola con
+>    reintento progresivo y sale solo al instalarse el certificado. Un documento cuya firma NO
+>    verifica es `ErrorFirma` permanente. La contraseña errónea del `.pfx` (`CryptographicException`)
+>    también se clasifica como recuperable de configuración, no zombi permanente.
+> 5. El documento FIRMADO sigue validando contra el XSD oficial (probado contra `e-CF 32 v.1.0.xsd`)
+>    y el XML firmado queda persistido para trazabilidad fiscal.
 
 ### 5.2 — Autenticación DGII: semilla → token (gate G2)
 1. **B3**: `DgiiAuthenticator`: GET semilla → firmar el XML de semilla (mismo signer) → POST

@@ -122,9 +122,24 @@ builder.Services.AddScoped<IUnidadDeTrabajo, UnidadDeTrabajo>();
 builder.Services.AddScoped<ProcesarVentaHandler>();
 builder.Services.AddScoped<RegistrarDevolucionHandler>();
 
-// Servicio Orquestador de Facturación Electrónica DGII
+// Servicio Orquestador de Facturación Electrónica DGII. La firma XML-DSig (sub-fase 5.1) exige el
+// certificado del emisor y el modo de operación (simulador/real): registro explícito para inyectarlos.
 builder.Services.AddSingleton<ISecurityCodeGenerator, POS.Infrastructure.Services.GeneradorCodigoSeguridad>();
-builder.Services.AddScoped<IElectronicInvoiceService, DgiiElectronicInvoiceService>();
+builder.Services.AddSingleton<IProveedorCertificadoDigital, ProveedorCertificadoDigital>();
+builder.Services.AddSingleton<IFirmadorComprobanteECF, FirmadorComprobanteECF>();
+builder.Services.AddScoped<IElectronicInvoiceService>(sp => new DgiiElectronicInvoiceService(
+    sp.GetRequiredService<IXmlSerializer>(),
+    sp.GetRequiredService<IXmlValidator>(),
+    sp.GetRequiredService<IHashGenerator>(),
+    sp.GetRequiredService<IDgiiApiClient>(),
+    sp.GetRequiredService<IInvoiceRepository>(),
+    sp.GetRequiredService<IAnulacionRepository>(),
+    sp.GetRequiredService<IEmisionDGIIQueueRepository>(),
+    sp.GetRequiredService<ILogger<DgiiElectronicInvoiceService>>(),
+    codigoSeguridad: sp.GetRequiredService<ISecurityCodeGenerator>(),
+    proveedorCertificado: sp.GetRequiredService<IProveedorCertificadoDigital>(),
+    firmador: sp.GetRequiredService<IFirmadorComprobanteECF>(),
+    dgiiConfig: dgiiConfig));
 
 // Servicio en segundo plano para resiliencia y cola offline DGII
 builder.Services.AddHostedService<POS.UI.Services.DgiiQueueBackgroundService>();

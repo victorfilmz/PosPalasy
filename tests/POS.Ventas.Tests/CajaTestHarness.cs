@@ -212,7 +212,8 @@ internal sealed class CajaTestHarness : IAsyncDisposable
                 new InvoiceRepository(contexto),
                 new CommonRepositories(contexto),
                 new EmisionDGIIQueueRepository(contexto),
-                NullLogger<DgiiElectronicInvoiceService>.Instance),
+                NullLogger<DgiiElectronicInvoiceService>.Instance,
+                dgiiConfig: new DgiiConfig { ModoSimulador = true }),
             new TaxCalculator(),
             new UnidadDeTrabajo(contexto));
     }
