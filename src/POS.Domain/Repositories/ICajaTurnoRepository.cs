@@ -48,4 +48,12 @@ public interface ICajaTurnoRepository
         decimal montoRealCierre,
         string? observaciones,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Acumula el reembolso de una devolución en los totales del turno con una sentencia atómica
+    /// condicionada a que el turno siga abierto. No abre transacción propia: se compone con la
+    /// transacción ambiente del caso de uso (el movimiento se inserta aparte con AddMovimientoAsync).
+    /// Devuelve 0 si el turno ya no está abierto.
+    /// </summary>
+    Task<int> AcumularDevolucionAsync(int turnoId, decimal monto, CancellationToken ct = default);
 }

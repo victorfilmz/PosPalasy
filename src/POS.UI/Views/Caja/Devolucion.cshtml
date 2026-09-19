@@ -1,0 +1,142 @@
+@model dynamic
+@using POS.Domain.Entities
+@using POS.Domain.Enums
+@{
+    ViewData["Title"] = "Devolución de venta";
+    var turnoActivo = (CajaTurno?)ViewBag.TurnoActivo;
+    var venta = (Venta?)ViewBag.Venta;
+}
+
+<div class="container-fluid px-4 py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 mb-1">Devolución de venta</h1>
+            <p class="text-muted mb-0">
+                Requiere turno de caja abierto: el efectivo sale de la gaveta del operador y queda referenciado a la venta.
+            </p>
+        </div>
+        <a asp-controller="Caja" asp-action="Index" class="btn btn-outline-secondary">Volver a caja</a>
+    </div>
+
+    @if (turnoActivo == null)
+    {
+        <div class="alert alert-warning">
+            <strong>No tiene un turno de caja abierto.</strong>
+            Abra su turno en <a asp-controller="Caja" asp-action="Apertura">Apertura de caja</a> antes de registrar devoluciones.
+        </div>
+    }
+
+    <div class="row g-4">
+        <div class="col-lg-5">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white"><strong>1. Buscar la venta</strong></div>
+                <div class="card-body">
+                    <form method="get" asp-controller="Caja" asp-action="Devolucion" class="row g-2">
+                        <div class="col">
+                            <input type="number" name="ventaId" class="form-control"
+                                   placeholder="N.º de venta" min="1" required value="@venta?.Id" />
+                        </div>
+                        <div class="col-auto">
+                            <button type="submit" class="btn btn-primary">Buscar</button>
+                        </div>
+                    </form>
+
+                    @if (venta != null)
+                    {
+                        <hr />
+                        <dl class="row mb-0 small">
+                            <dt class="col-5">Venta</dt>
+                            <dd class="col-7 mb-1">#@venta.Id — @venta.Fecha.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</dd>
+                            <dt class="col-5">Comprobante</dt>
+                            <dd class="col-7 mb-1">
+                                @if (venta.ElectronicInvoice != null)
+                                {
+                                    <span class="badge bg-success">@venta.ElectronicInvoice.eNCF</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger">Sin e-CF</span>
+                                    <span class="text-danger d-block small">No devolvible por esta vía</span>
+                                }
+                            </dd>
+                            <dt class="col-5">Total cobrado</dt>
+                            <dd class="col-7 mb-1"><strong>RD$ @venta.Total.ToString("N2")</strong></dd>
+                            <dt class="col-5">Cajero</dt>
+                            <dd class="col-7 mb-0">@venta.Usuario ?? "—"</dd>
+                        </dl>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-7">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white"><strong>2. Registrar la devolución</strong></div>
+                <div class="card-body">
+                    @if (venta == null)
+                    {
+                        <p class="text-muted mb-0">Busque una venta para continuar.</p>
+                    }
+                    else if (venta.ElectronicInvoice == null)
+                    {
+                        <div class="alert alert-danger mb-0">
+                            La venta no tiene comprobante fiscal registrado; no es posible devolverla por esta vía.
+                        </div>
+                    }
+                    else
+                    {
+                        <form method="post" asp-controller="Caja" asp-action="Devolucion">
+                            @Html.AntiForgeryToken()
+                            <input type="hidden" name="ClaveIdempotencia" value="@Guid.NewGuid()" />
+                            <input type="hidden" name="VentaId" value="@venta.Id" />
+
+                            <table class="table table-sm align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>Producto</th>
+                                        <th class="text-center">Vendido</th>
+                                        <th class="text-center" style="width:130px">A devolver</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var linea in venta.Items.OrderBy(i => i.NumeroLinea))
+                                    {
+                                        <tr>
+                                            <td>
+                                                @linea.Descripcion
+                                                <input type="hidden" name="Cantidades[@linea.Id]" value="" />
+                                            </td>
+                                            <td class="text-center">@linea.Cantidad.ToString("0.##")</td>
+                                            <td>
+                                                <input type="number" class="form-control form-control-sm"
+                                                       name="Cantidades[@linea.Id]" min="0"
+                                                       max="@linea.Cantidad" step="0.01"
+                                                       value="@linea.Cantidad" />
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+
+                            <div class="mb-3">
+                                <label class="form-label">Motivo (obligatorio)</label>
+                                <textarea name="Motivo" class="form-control" rows="2" maxlength="500"
+                                          required placeholder="Producto defectuoso, error de venta, etc."></textarea>
+                            </div>
+
+                            <div class="alert alert-info small mb-3">
+                                El reembolso se reparte por las formas de pago de la venta: tarjeta y transferencia se reversan
+                                por ese medio; el resto sale en efectivo de la caja del turno actual.
+                            </div>
+
+                            <button type="submit" class="btn btn-danger"
+                                    @(turnoActivo == null ? "disabled" : null)>
+                                Registrar devolución
+                            </button>
+                        </form>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

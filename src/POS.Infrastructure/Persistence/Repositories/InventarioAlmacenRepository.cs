@@ -118,6 +118,49 @@ public class InventarioAlmacenRepository : IInventarioAlmacenRepository
         return new ResultadoDescuentoStock(true, resultante, true);
     }
 
+    public async Task<ResultadoDescuentoStock> ReingresarStockAsync(
+        int productoId,
+        int sucursalId,
+        decimal cantidad,
+        CancellationToken ct = default)
+    {
+        if (cantidad <= 0)
+            throw new ReglaDeNegocioException(
+                "La cantidad a reingresar debe ser mayor que cero.",
+                "CANTIDAD_INVALIDA");
+
+        // Incremento atómico: la lectura del resultante ocurre en la misma sentencia (OUTPUT-style
+        // vía re-lectura) para que dos devoluciones concurrentes no se pisen.
+        var filas = await _context.InventariosAlmacen
+            .Where(i => i.ProductoId == productoId && i.SucursalId == sucursalId)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(i => i.StockActual, i => i.StockActual + cantidad)
+                .SetProperty(i => i.UpdatedAt, _ => DateTime.UtcNow), ct);
+
+        if (filas == 0)
+        {
+            // Sin fila previa (venta permisiva devuelta): se crea con el stock reingresado.
+            await _context.InventariosAlmacen.AddAsync(new InventarioAlmacen
+            {
+                ProductoId = productoId,
+                SucursalId = sucursalId,
+                StockActual = cantidad,
+                StockMinimo = 5m
+            }, ct);
+            await _context.SaveChangesAsync(ct);
+
+            return new ResultadoDescuentoStock(true, cantidad, false);
+        }
+
+        var resultante = await _context.InventariosAlmacen
+            .AsNoTracking()
+            .Where(i => i.ProductoId == productoId && i.SucursalId == sucursalId)
+            .Select(i => i.StockActual)
+            .FirstAsync(ct);
+
+        return new ResultadoDescuentoStock(true, resultante, true);
+    }
+
     public async Task<decimal> GetStockAsync(int productoId, int sucursalId, CancellationToken ct = default)
     {
         var inv = await _context.InventariosAlmacen

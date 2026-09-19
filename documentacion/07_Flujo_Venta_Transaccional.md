@@ -390,3 +390,8 @@ nunca hay dos trabajadores sobre el mismo comprobante.
 8. ~~Doble ruta de venta~~ **Resuelto en Fase 3**: la emisión libre de comprobantes
    (`FacturacionController.Emitir`) fue retirada; `ProcesarVentaHandler` es el único camino de registro
    y la numeración la asigna siempre `SecuenciaECFRepository`.
+9. **Devoluciones, caja y arqueo** — **Resuelto en Fase 4** (ver
+   [`10_Caja_Devoluciones.md`](10_Caja_Devoluciones.md)): reembolso por la forma de pago original,
+   movimiento de caja referenciado a la venta, tope de reembolso serializado ante devoluciones
+   concurrentes e idempotencia de devolución. La generación del e-CF de crédito / ANECF ante la
+   DGII queda para las fases fiscales.

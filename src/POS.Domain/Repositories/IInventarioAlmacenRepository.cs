@@ -28,6 +28,17 @@ public interface IInventarioAlmacenRepository
         decimal cantidad,
         bool permitirStockNegativo,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// Reingresa existencias por devolución de venta con una única sentencia atómica de incremento.
+    /// Crea la fila de inventario si no existe (puede ocurrir tras una venta con fila creada bajo
+    /// política permisiva devuelta a otra sucursal). Devuelve el stock resultante.
+    /// </summary>
+    Task<ResultadoDescuentoStock> ReingresarStockAsync(
+        int productoId,
+        int sucursalId,
+        decimal cantidad,
+        CancellationToken ct = default);
     Task<IEnumerable<InventarioAlmacen>> GetBySucursalAsync(int sucursalId, CancellationToken ct = default);
     Task<IEnumerable<InventarioAlmacen>> GetByProductoAsync(int productoId, CancellationToken ct = default);
     Task<IEnumerable<InventarioAlmacen>> GetAllAsync(CancellationToken ct = default);

@@ -37,6 +37,9 @@ public class CajaTurno : BaseEntity
     public decimal TotalEntradasEfectivo { get; set; }
     public decimal TotalSalidasEfectivo { get; set; }
 
+    /// <summary>Efectivo devuelto por devoluciones de venta en este turno (Fase 4).</summary>
+    public decimal TotalDevoluciones { get; set; }
+
     // Arqueo y Cierre
     public decimal? MontoRealCierre { get; set; } // Efectivo físico contado al cierre
     public decimal? Diferencia { get; set; } // MontoRealCierre - EfectivoEsperado
@@ -67,4 +70,15 @@ public class MovimientoCaja : BaseEntity
     public decimal Monto { get; set; }
     public string Concepto { get; set; } = string.Empty;
     public DateTime Fecha { get; set; } = DateTime.UtcNow;
+
+    /// <summary>Usuario autenticado que registró el movimiento (trazabilidad, Fase 4).</summary>
+    public string? Usuario { get; set; }
+
+    /// <summary>
+    /// Venta con la que se relaciona el movimiento (devolución, cobro de crédito, ajuste).
+    /// Null para movimientos de caja sin origen en una venta. Un movimiento con venta es siempre
+    /// de salida (reembolso): la venta ya acumuló su ingreso al registrarse.
+    /// </summary>
+    public int? VentaId { get; set; }
+    public Venta? Venta { get; set; }
 }

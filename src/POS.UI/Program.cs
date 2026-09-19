@@ -13,6 +13,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using POS.Application.CasosDeUso.Ventas;
+using POS.Application.CasosDeUso.Caja;
 using POS.Application.Interfaces;
 using POS.Application.Security;
 using POS.Application.Services;
@@ -114,10 +115,12 @@ builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
 builder.Services.AddScoped<IAutenticacionService, AutenticacionService>();
 builder.Services.AddScoped<ISecuenciaECFRepository, SecuenciaECFRepository>();
 builder.Services.AddScoped<IAuditoriaRepository, POS.Infrastructure.Persistence.Repositories.AuditoriaRepository>();
+builder.Services.AddScoped<IDevolucionRepository, POS.Infrastructure.Persistence.Repositories.DevolucionRepository>();
 
 // Frontera transaccional y casos de uso
 builder.Services.AddScoped<IUnidadDeTrabajo, UnidadDeTrabajo>();
 builder.Services.AddScoped<ProcesarVentaHandler>();
+builder.Services.AddScoped<RegistrarDevolucionHandler>();
 
 // Servicio Orquestador de Facturación Electrónica DGII
 builder.Services.AddScoped<IElectronicInvoiceService, DgiiElectronicInvoiceService>();

@@ -20,12 +20,15 @@ public class VentaRepository : IVentaRepository
 
     public async Task<Venta?> GetByIdAsync(int id, CancellationToken ct = default)
     {
-        return await _context.Ventas.FirstOrDefaultAsync(v => v.Id == id, ct);
+        return await _context.Ventas
+            .Include(v => v.Pagos)
+            .FirstOrDefaultAsync(v => v.Id == id, ct);
     }
 
     public async Task<Venta?> GetWithItemsAsync(int id, CancellationToken ct = default)
     {
         return await _context.Ventas
+            .Include(v => v.Pagos)
             .Include(v => v.Items)
             .Include(v => v.Cliente)
             .Include(v => v.ElectronicInvoice)
@@ -35,6 +38,7 @@ public class VentaRepository : IVentaRepository
     public async Task<IEnumerable<Venta>> GetByDateRangeAsync(DateTime from, DateTime to, CancellationToken ct = default)
     {
         return await _context.Ventas
+            .Include(v => v.Pagos)
             .Include(v => v.Items)
             .Where(v => v.Fecha >= from && v.Fecha <= to)
             .ToListAsync(ct);
@@ -43,6 +47,7 @@ public class VentaRepository : IVentaRepository
     public async Task<IEnumerable<Venta>> GetPendingElectronicInvoicingAsync(CancellationToken ct = default)
     {
         return await _context.Ventas
+            .Include(v => v.Pagos)
             .Include(v => v.Items)
             .Include(v => v.Cliente)
             .Where(v => v.ElectronicInvoice == null)
@@ -55,6 +60,7 @@ public class VentaRepository : IVentaRepository
             return null;
 
         return await _context.Ventas
+            .Include(v => v.Pagos)
             .Include(v => v.Items)
             .Include(v => v.ElectronicInvoice)
             .FirstOrDefaultAsync(v => v.ClaveIdempotencia == clave, ct);

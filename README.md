@@ -83,6 +83,7 @@ Flujo completo, máquina de estados, idempotencia y matriz de escenarios:
 [`documentacion/07_Flujo_Venta_Transaccional.md`](documentacion/07_Flujo_Venta_Transaccional.md).
 Política de existencias: [`documentacion/08_Politica_Stock.md`](documentacion/08_Politica_Stock.md).
 Numeración fiscal bajo concurrencia: [`documentacion/09_Concurrencia_eNCF.md`](documentacion/09_Concurrencia_eNCF.md).
+Caja y devoluciones: [`documentacion/10_Caja_Devoluciones.md`](documentacion/10_Caja_Devoluciones.md).
 
 ## Pruebas
 

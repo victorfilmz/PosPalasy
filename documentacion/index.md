@@ -10,6 +10,7 @@
 > 📁 [07_Flujo_Venta_Transaccional.md](07_Flujo_Venta_Transaccional.md) — **Venta: caso de uso, transacción, estados, idempotencia, eNCF, inventario y caja**
 > 📁 [08_Politica_Stock.md](08_Politica_Stock.md) — **Política de existencias (Permitir/Advertir/Bloquear) y auditoría del cambio**
 > 📁 [09_Concurrencia_eNCF.md](09_Concurrencia_eNCF.md) — **Numeración fiscal bajo concurrencia: medición y solución**
+> 📁 [10_Caja_Devoluciones.md](10_Caja_Devoluciones.md) — **Caja: devoluciones transaccionales, reembolso, trazabilidad, arqueo y cierre**
 > 📁 [README.md](README.md) — Documentación principal y guía de inicio
 >
 > ---

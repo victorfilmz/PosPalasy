@@ -125,6 +125,18 @@ public class CajaTurnoRepository : ICajaTurnoRepository
         await transaccion.CommitAsync(ct);
     }
 
+    public async Task<int> AcumularDevolucionAsync(int turnoId, decimal monto, CancellationToken ct = default)
+    {
+        // La devolución es salida de efectivo: afecta el acumulado específico y el total de salidas
+        // (el arqueo lo descuenta del esperado). Sin transacción propia: se une a la del caso de uso.
+        return await _context.CajaTurnos
+            .Where(c => c.Id == turnoId && c.Estado == TurnoCajaEstado.Abierto)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(c => c.TotalDevoluciones, c => c.TotalDevoluciones + monto)
+                .SetProperty(c => c.TotalSalidasEfectivo, c => c.TotalSalidasEfectivo + monto)
+                .SetProperty(c => c.UpdatedAt, _ => DateTime.UtcNow), ct);
+    }
+
     public async Task<int> CerrarTurnoAsync(
         int turnoId,
         decimal montoRealCierre,

@@ -27,6 +27,8 @@ public class POSDbContext : DbContext
     public DbSet<Usuario> Usuarios => Set<Usuario>();
     public DbSet<SecuenciaECF> SecuenciasECF => Set<SecuenciaECF>();
     public DbSet<AuditoriaCambio> AuditoriaCambios => Set<AuditoriaCambio>();
+    public DbSet<Devolucion> Devoluciones => Set<Devolucion>();
+    public DbSet<DevolucionItem> DevolucionesItems => Set<DevolucionItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -358,6 +360,59 @@ public class POSDbContext : DbContext
             b.HasKey(m => m.Id);
             b.Property(m => m.Monto).HasPrecision(18, 2);
             b.Property(m => m.Concepto).HasMaxLength(250).IsRequired();
+            b.Property(m => m.Usuario).HasMaxLength(100);
+
+            b.HasOne(m => m.Venta)
+                .WithMany()
+                .HasForeignKey(m => m.VentaId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Devolucion (Fase 4)
+        modelBuilder.Entity<Devolucion>(b =>
+        {
+            b.HasKey(d => d.Id);
+            b.Property(d => d.Usuario).HasMaxLength(100).IsRequired();
+            b.Property(d => d.Motivo).HasMaxLength(500).IsRequired();
+            b.Property(d => d.TotalDevuelto).HasPrecision(18, 2);
+            b.Property(d => d.EfectivoDevuelto).HasPrecision(18, 2);
+            b.Property(d => d.TarjetaDevuelto).HasPrecision(18, 2);
+            b.Property(d => d.TransferenciaDevuelto).HasPrecision(18, 2);
+
+            // Barrera de idempotencia: la misma solicitud no puede producir dos reembolsos.
+            b.HasIndex(d => d.ClaveIdempotencia).IsUnique();
+
+            b.HasOne(d => d.Venta)
+                .WithMany()
+                .HasForeignKey(d => d.VentaId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            b.HasOne(d => d.CajaTurno)
+                .WithMany()
+                .HasForeignKey(d => d.CajaTurnoId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            b.HasMany(d => d.Items)
+                .WithOne(i => i.Devolucion!)
+                .HasForeignKey(i => i.DevolucionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // DevolucionItem
+        modelBuilder.Entity<DevolucionItem>(b =>
+        {
+            b.HasKey(i => i.Id);
+            b.Property(i => i.Descripcion).HasMaxLength(200).IsRequired();
+            b.Property(i => i.Cantidad).HasPrecision(18, 2);
+            b.Property(i => i.MontoBase).HasPrecision(18, 2);
+            b.Property(i => i.MontoITBIS).HasPrecision(18, 2);
+            b.Property(i => i.MontoTotal).HasPrecision(18, 2);
+
+            // Snapshot: la línea vendida no se borra con la devolución.
+            b.HasOne(i => i.Producto)
+                .WithMany()
+                .HasForeignKey(i => i.ProductoId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

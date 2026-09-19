@@ -53,6 +53,9 @@ public static class CodigosConflicto
     /// <summary>El eNCF asignado ya existe (carrera de secuencia detectada por la base de datos).</summary>
     public const string EncfDuplicado = "ENCF_DUPLICADO";
 
+    /// <summary>Ya existe una devolución con la misma clave de idempotencia (Fase 4).</summary>
+    public const string IdempotenciaDevolucion = "IDEMPOTENCIA_DEVOLUCION";
+
     /// <summary>Otro conflicto de unicidad no clasificado.</summary>
     public const string Generico = "CONFLICTO_UNICIDAD";
 }

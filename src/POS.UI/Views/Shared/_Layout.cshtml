@@ -46,6 +46,10 @@
                     <i class="bi bi-safe2"></i>
                     <span class="link-text">Turnos y Cuadre</span>
                 </a>
+                <a asp-controller="Caja" asp-action="Devolucion" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Caja" && ViewContext.RouteData.Values["action"]?.ToString() == "Devolucion" ? "active" : "")" title="Devolución de venta (supervisión)">
+                    <i class="bi bi-arrow-counterclockwise"></i>
+                    <span class="link-text">Devolución de Venta</span>
+                </a>
 
                 <!-- Grupo 2: Inventario y Existencias -->
                 <div class="nav-group-title">Inventario y Stock</div>

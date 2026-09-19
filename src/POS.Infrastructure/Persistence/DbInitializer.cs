@@ -276,6 +276,52 @@ BEGIN
     );
     CREATE UNIQUE INDEX [IX_SecuenciasECF_Serie] ON [SecuenciasECF] ([Serie]);
 END
+
+-- Devoluciones de venta (Fase 4): reembolso referenciado con idempotencia.
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'Devoluciones')
+BEGIN
+    CREATE TABLE [Devoluciones] (
+        [Id] int NOT NULL IDENTITY,
+        [ClaveIdempotencia] uniqueidentifier NOT NULL,
+        [VentaId] int NOT NULL,
+        [CajaTurnoId] int NULL,
+        [Usuario] nvarchar(100) NOT NULL,
+        [Motivo] nvarchar(500) NOT NULL,
+        [Fecha] datetime2 NOT NULL,
+        [TotalDevuelto] decimal(18,2) NOT NULL,
+        [EfectivoDevuelto] decimal(18,2) NOT NULL,
+        [TarjetaDevuelto] decimal(18,2) NOT NULL,
+        [TransferenciaDevuelto] decimal(18,2) NOT NULL,
+        [RequiereComprobanteFiscal] bit NOT NULL DEFAULT 1,
+        [CreatedAt] datetime2 NOT NULL DEFAULT (GETUTCDATE()),
+        [UpdatedAt] datetime2 NULL,
+        CONSTRAINT [PK_Devoluciones] PRIMARY KEY ([Id]),
+        CONSTRAINT [FK_Devoluciones_Ventas_VentaId] FOREIGN KEY ([VentaId]) REFERENCES [Ventas] ([Id]) ON DELETE NO ACTION,
+        CONSTRAINT [FK_Devoluciones_CajaTurnos_CajaTurnoId] FOREIGN KEY ([CajaTurnoId]) REFERENCES [CajaTurnos] ([Id]) ON DELETE SET NULL
+    );
+    CREATE UNIQUE INDEX [IX_Devoluciones_ClaveIdempotencia] ON [Devoluciones] ([ClaveIdempotencia]);
+    CREATE INDEX [IX_Devoluciones_VentaId] ON [Devoluciones] ([VentaId]);
+END
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'DevolucionItems')
+BEGIN
+    CREATE TABLE [DevolucionItems] (
+        [Id] int NOT NULL IDENTITY,
+        [DevolucionId] int NOT NULL,
+        [VentaItemId] int NOT NULL,
+        [ProductoId] int NOT NULL,
+        [Descripcion] nvarchar(200) NOT NULL,
+        [Cantidad] decimal(18,2) NOT NULL,
+        [MontoBase] decimal(18,2) NOT NULL,
+        [MontoITBIS] decimal(18,2) NOT NULL,
+        [MontoTotal] decimal(18,2) NOT NULL,
+        [CreatedAt] datetime2 NOT NULL DEFAULT (GETUTCDATE()),
+        [UpdatedAt] datetime2 NULL,
+        CONSTRAINT [PK_DevolucionItems] PRIMARY KEY ([Id]),
+        CONSTRAINT [FK_DevolucionItems_Devoluciones_DevolucionId] FOREIGN KEY ([DevolucionId]) REFERENCES [Devoluciones] ([Id]) ON DELETE CASCADE,
+        CONSTRAINT [FK_DevolucionItems_Productos_ProductoId] FOREIGN KEY ([ProductoId]) REFERENCES [Productos] ([Id]) ON DELETE NO ACTION
+    );
+    CREATE INDEX [IX_DevolucionItems_DevolucionId] ON [DevolucionItems] ([DevolucionId]);
+END
 ";
             await context.Database.ExecuteSqlRawAsync(integridadTablasSql);
 
@@ -321,6 +367,14 @@ IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[Ventas]'
     ALTER TABLE [Ventas] ADD [RequiereRevisionStock] bit NOT NULL DEFAULT 0;
 IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[MovimientosInventario]') AND name = 'RequiereRevision')
     ALTER TABLE [MovimientosInventario] ADD [RequiereRevision] bit NOT NULL DEFAULT 0;
+
+-- Devoluciones de caja (Fase 4): acumulado de reembolsos del turno y trazabilidad del movimiento.
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[CajaTurnos]') AND name = 'TotalDevoluciones')
+    ALTER TABLE [CajaTurnos] ADD [TotalDevoluciones] decimal(18,2) NOT NULL DEFAULT 0;
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[MovimientosCaja]') AND name = 'Usuario')
+    ALTER TABLE [MovimientosCaja] ADD [Usuario] nvarchar(100) NULL;
+IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[MovimientosCaja]') AND name = 'VentaId')
+    ALTER TABLE [MovimientosCaja] ADD [VentaId] int NULL;
 
 -- Auditoría mínima de cambios de configuración (usuario, fecha, antes, después, motivo).
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'AuditoriaCambios')
@@ -388,6 +442,17 @@ IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[Ventas]') AN
 IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[CajaTurnos]') AND name = 'UsuarioId')
     AND NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_CajaTurnos_UsuarioId_Estado' AND object_id = OBJECT_ID(N'[CajaTurnos]'))
     CREATE INDEX [IX_CajaTurnos_UsuarioId_Estado] ON [CajaTurnos] ([UsuarioId], [Estado]);
+
+-- FK del movimiento de caja a su venta de origen (creada en lote previo; el índice va aquí).
+IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[MovimientosCaja]') AND name = 'VentaId')
+    AND NOT EXISTS (SELECT * FROM sys.foreign_keys WHERE name = 'FK_MovimientosCaja_Ventas_VentaId')
+BEGIN
+    ALTER TABLE [MovimientosCaja] ADD CONSTRAINT [FK_MovimientosCaja_Ventas_VentaId]
+        FOREIGN KEY ([VentaId]) REFERENCES [Ventas] ([Id]) ON DELETE NO ACTION;
+END
+IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[MovimientosCaja]') AND name = 'VentaId')
+    AND NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_MovimientosCaja_VentaId' AND object_id = OBJECT_ID(N'[MovimientosCaja]'))
+    CREATE INDEX [IX_MovimientosCaja_VentaId] ON [MovimientosCaja] ([VentaId]);
 
 -- Los comprobantes ya transmitidos antes de este cambio quedan en envio confirmado (6).
 IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[ElectronicInvoices]') AND name = 'EstadoEmision')
