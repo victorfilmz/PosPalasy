@@ -3,6 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using POS.Application.DTOs;
 using POS.Application.Validators;
+using POS.Domain.Types;
 
 namespace POS.Application.Interfaces;
 
@@ -56,7 +57,7 @@ public interface IElectronicInvoiceService
 
     Task<string> GenerarXmlAsync(ElectronicInvoiceRequest request);
 
-    Task<ValidationResult> ValidarXmlAsync(string xmlContent);
+    Task<ValidationResult> ValidarXmlAsync(string xmlContent, TipoeCFType tipo = TipoeCFType.FacturaConsumo);
 
     string GenerarHash(string xmlContent);
 

@@ -123,6 +123,7 @@ builder.Services.AddScoped<ProcesarVentaHandler>();
 builder.Services.AddScoped<RegistrarDevolucionHandler>();
 
 // Servicio Orquestador de Facturación Electrónica DGII
+builder.Services.AddSingleton<ISecurityCodeGenerator, POS.Infrastructure.Services.GeneradorCodigoSeguridad>();
 builder.Services.AddScoped<IElectronicInvoiceService, DgiiElectronicInvoiceService>();
 
 // Servicio en segundo plano para resiliencia y cola offline DGII

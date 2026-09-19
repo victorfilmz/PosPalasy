@@ -21,6 +21,9 @@ public class XmlSerializer : IXmlSerializer
 {
     private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
+    /// <summary>Namespace XML-DSig del bloque de firma que reserva el XSD.</summary>
+    private static readonly XNamespace Ds = "http://www.w3.org/2000/09/xmldsig#";
+
     public string Serialize(ElectronicInvoiceRequest request)
     {
         if (request == null) throw new ArgumentNullException(nameof(request));
@@ -29,7 +32,13 @@ public class XmlSerializer : IXmlSerializer
             new XDeclaration("1.0", "utf-8", "yes"),
             new XElement("ECF",
                 CrearEncabezado(request),
-                CrearDetallesItems(request)
+                CrearDetallesItems(request),
+                // FechaHoraFirma es obligatoria en el XSD (patrón dd-MM-yyyy HH:mm:ss).
+                new XElement("FechaHoraFirma", DateTime.UtcNow.ToString("dd-MM-yyyy HH:mm:ss", Inv)),
+                // El XSD exige exactamente un elemento tras FechaHoraFirma: el espacio reservado
+                // para la firma XML-DSig (ds:Signature). Se emite VACÍO desde la construcción para
+                // que el documento sea estructuralmente completo; la firma (sub-fase 5.1) lo llena.
+                new XElement(Ds + "Signature")
             )
         );
 
@@ -49,9 +58,14 @@ public class XmlSerializer : IXmlSerializer
             new XElement("IdDoc",
                 new XElement("TipoeCF", (int)req.TipoeCF),
                 new XElement("eNCF", req.eNCF),
+                // El tipo 31 (crédito fiscal) exige la fecha de vencimiento de la secuencia del eNCF:
+                // la normativa le da 6 meses de vigencia desde la emisión.
+                req.TipoeCF == TipoeCFType.FacturaCreditoFiscal
+                    ? new XElement("FechaVencimientoSecuencia", req.FechaFactura.Value.AddMonths(6).ToString("dd-MM-yyyy", Inv))
+                    : null,
                 new XElement("TipoIngresos", TipoIngresosFormatter.ToString(req.TipoIngresos)),
                 new XElement("TipoPago", (int)req.TipoPago),
-                CrearOpcional("FechaLimitePago", req.FechaVencimiento?.ToString("dd-MM-yyyy")),
+                CrearOpcional("FechaLimitePago", req.FechaVencimiento?.ToString("dd-MM-yyyy", Inv)),
                 CrearOpcional("TerminoPago", req.PlazoCredito)
             ),
 
@@ -62,19 +76,24 @@ public class XmlSerializer : IXmlSerializer
                 CrearOpcional("NombreComercial", emisor.NombreComercial),
                 CrearOpcional("Sucursal", emisor.Sucursal),
                 new XElement("DireccionEmisor", emisor.Direccion),
-                CrearOpcional("Municipio", emisor.CodigoMunicipio),
-                CrearOpcional("Provincia", emisor.CodigoProvincia),
-                CrearOpcional("TelefonoEmisor", emisor.Telefono),
+                CrearOpcional("Municipio", NormalizarCodigoTerritorial(emisor.CodigoMunicipio)),
+                CrearOpcional("Provincia", NormalizarCodigoTerritorial(emisor.CodigoProvincia)),
+                // El XSD exige el teléfono dentro de TablaTelefonoEmisor (1..3 repeticiones).
+                string.IsNullOrWhiteSpace(emisor.Telefono)
+                    ? null
+                    : new XElement("TablaTelefonoEmisor",
+                        new XElement("TelefonoEmisor", emisor.Telefono)),
                 CrearOpcional("CorreoEmisor", emisor.Email),
                 CrearOpcional("WebSite", emisor.SitioWeb),
                 new XElement("FechaEmision", req.FechaFactura.ToXmlString())
             ),
 
-            // Comprador
+            // Comprador: el elemento es obligatorio pero TODOS sus campos son opcionales en el XSD;
+            // solo se emiten los que tengan valor (un elemento vacío viola los patrones).
             new XElement("Comprador",
                 CrearOpcional("RNCComprador", comprador.RNC),
                 CrearOpcional("IdentificadorExtranjero", comprador.Identificacion),
-                new XElement("RazonSocialComprador", comprador.RazonSocial),
+                CrearOpcional("RazonSocialComprador", comprador.RazonSocial),
                 CrearOpcional("DireccionComprador", comprador.Direccion),
                 CrearOpcional("MunicipioComprador", comprador.CodigoMunicipio),
                 CrearOpcional("ProvinciaComprador", comprador.CodigoProvincia),
@@ -112,14 +131,17 @@ public class XmlSerializer : IXmlSerializer
                 new XElement("NumeroLinea", i + 1),
                 new XElement("IndicadorFacturacion", (int)item.IndicadorFacturacion),
                 new XElement("NombreItem", item.Descripcion),
-                CrearOpcional("DescripcionItem", item.Descripcion),
+                // Orden exigido por la secuencia del XSD: IndicadorBienoServicio ANTES de DescripcionItem.
                 new XElement("IndicadorBienoServicio", 1), // 1 = Bien, 2 = Servicio
+                CrearOpcional("DescripcionItem", item.Descripcion),
                 new XElement("CantidadItem", item.Cantidad.ToString("F2", Inv)),
                 new XElement("UnidadMedida", (int)item.UnidadMedida),
                 new XElement("PrecioUnitarioItem", item.PrecioUnitario.ToString("F4", Inv)),
                 CrearOpcional("DescuentoMonto", item.Descuento > 0 ? FormatearDecimal(item.Descuento) : null),
                 CrearOpcional("RecargoMonto", item.Recargo > 0 ? FormatearDecimal(item.Recargo) : null),
-                new XElement("MontoItem", FormatearDecimal(item.Subtotal))
+                // MontoItem es el total de la línea CON sus impuestos: única cifra coherente con
+                // MontoTotal del comprobante (suma de líneas con impuestos).
+                new XElement("MontoItem", FormatearDecimal(item.Total))
             );
 
             itemsElement.Add(itemEl);
@@ -156,4 +178,16 @@ public class XmlSerializer : IXmlSerializer
     }
 
     private static string FormatearDecimal(decimal valor) => valor.ToString("F2", Inv);
+
+    /// <summary>
+    /// Normaliza códigos territoriales al formato de 6 dígitos del XSD (ProvinciaMunicipioType).
+    /// El sistema almacena la provincia como 2 dígitos ("01"); el XSD exige "010000". Los códigos
+    /// de municipio ya nacen de 6 dígitos y pasan intactos.
+    /// </summary>
+    private static string? NormalizarCodigoTerritorial(string? codigo)
+    {
+        if (string.IsNullOrWhiteSpace(codigo)) return null;
+
+        return codigo.Length == 2 ? codigo + "0000" : codigo;
+    }
 }

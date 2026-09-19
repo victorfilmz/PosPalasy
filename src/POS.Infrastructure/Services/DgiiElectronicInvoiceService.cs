@@ -12,6 +12,7 @@ using POS.Domain.Common;
 using POS.Domain.Entities;
 using POS.Domain.Enums;
 using POS.Domain.Repositories;
+using POS.Domain.Types;
 using POS.Infrastructure.DGII;
 using POS.Infrastructure.XmlSerialization;
 
@@ -31,16 +32,16 @@ namespace POS.Infrastructure.Services;
 /// la respuesta real. Nunca se ejecuta dentro de la transacción de la venta.</item>
 /// </list>
 /// <para>
-/// Estado actual de la construcción del documento: el XML se genera y se persiste, pero la
-/// validación contra el XSD oficial y la firma XML-DSig todavía no forman parte del flujo (fases
-/// posteriores del plan). El estado de emisión lo refleja de forma honesta: no se declara validado
-/// ni firmado lo que no se ha validado ni firmado.
+/// Estado de la construcción del documento (FASE 5, sub-fase 5.0): el XML se construye con el hueco
+/// estructural de la firma (ds:Signature) exigido por el XSD, se valida contra el esquema oficial
+/// del tipo del comprobante (transición a XsdValidado; ErrorXsd si no valida) y se le asigna el
+/// código de seguridad de 6 caracteres por comprobante. La firma XML-DSig real llega en 5.1.
 /// </para>
 /// </remarks>
 public class DgiiElectronicInvoiceService : IElectronicInvoiceService
 {
     private readonly IXmlSerializer _xmlSerializer;
-    private readonly IXmlValidator _xmlValidator;
+    private readonly ISecurityCodeGenerator _codigoSeguridad;    private readonly IXmlValidator _xmlValidator;
     private readonly IHashGenerator _hashGenerator;
     private readonly IDgiiApiClient _dgiiApiClient;
     private readonly IInvoiceRepository _invoiceRepository;
@@ -58,7 +59,8 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
         IAnulacionRepository anulacionRepository,
         IEmisionDGIIQueueRepository queueRepository,
         ILogger<DgiiElectronicInvoiceService> logger,
-        string? xsdBasePath = null)
+        string? xsdBasePath = null,
+        ISecurityCodeGenerator? codigoSeguridad = null)
     {
         _xmlSerializer = xmlSerializer ?? throw new ArgumentNullException(nameof(xmlSerializer));
         _xmlValidator = xmlValidator ?? throw new ArgumentNullException(nameof(xmlValidator));
@@ -68,6 +70,7 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
         _anulacionRepository = anulacionRepository ?? throw new ArgumentNullException(nameof(anulacionRepository));
         _queueRepository = queueRepository ?? throw new ArgumentNullException(nameof(queueRepository));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _codigoSeguridad = codigoSeguridad ?? new GeneradorCodigoSeguridad();
 
         _xsdBasePath = xsdBasePath ?? Path.Combine(AppContext.BaseDirectory, "documentacion xsd");
     }
@@ -78,16 +81,12 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
         return Task.FromResult(xml);
     }
 
-    public Task<ValidationResult> ValidarXmlAsync(string xmlContent)
+    public Task<ValidationResult> ValidarXmlAsync(string xmlContent, TipoeCFType tipo = TipoeCFType.FacturaConsumo)
     {
-        var xsdPath = Path.Combine(_xsdBasePath, "e-CF 32 v.1.0.xsd");
-        if (!File.Exists(xsdPath))
-        {
-            // Intentar ruta relativa desde raíz del proyecto
-            xsdPath = Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "documentacion xsd", "e-CF 32 v.1.0.xsd"));
-        }
+        var rutaXsd = MapaXsdComprobante.ResolverRuta(tipo)
+            ?? Path.Combine(_xsdBasePath, MapaXsdComprobante.ArchivoDe(tipo));
 
-        var result = _xmlValidator.Validate(xmlContent, xsdPath);
+        var result = _xmlValidator.Validate(xmlContent, rutaXsd);
         return Task.FromResult(result);
     }
 
@@ -118,14 +117,23 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
                 string.Join(" | ", valResult.Errores),
                 "COMPROBANTE_INVALIDO");
 
-        // 1. Construcción del documento local.
+        // 1. Construcción del documento local: incluye el hueco estructural de la firma (ds:Signature)
+        //    exigido por el XSD; el documento nace estructuralmente completo.
         var xml = _xmlSerializer.Serialize(req);
 
-        // 2. Código de seguridad sobre el documento construido.
-        var hash = _hashGenerator.Generate(xml);
+        // 2. Validación contra el esquema oficial del TIPO del comprobante (no un XSD único).
+        var validacion = await ValidarXmlAsync(xml, req.TipoeCF);
+        if (!validacion.EsValido)
+            throw new ReglaDeNegocioException(
+                "El comprobante no valida contra el esquema XSD oficial: " +
+                    string.Join(" | ", validacion.Errores.Take(5)),
+                "ERROR_XSD");
+
+        // 3. Código de seguridad: 6 caracteres asignados por comprobante (no derivados del XML).
+        var hash = _codigoSeguridad.Generar();
         req.CodigoSeguridadeCF = hash;
 
-        // 3. Persistencia del comprobante sin transmitir.
+        // 4. Persistencia del comprobante sin transmitir.
         var invoiceEntity = new ElectronicInvoice
         {
             VentaId = command.VentaId,
@@ -181,7 +189,9 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
             });
         }
 
-        AvanzarEstado(invoiceEntity, EstadoEmisionECF.XmlGenerado);
+        // El documento nació, se validó contra el XSD oficial y se persistió: el estado honesto es
+        // XsdValidado (la firma llega en 5.1; el hueco ds:Signature ya está en el documento).
+        AvanzarEstado(invoiceEntity, EstadoEmisionECF.XsdValidado);
 
         await _invoiceRepository.AddAsync(invoiceEntity, cancellationToken);
 

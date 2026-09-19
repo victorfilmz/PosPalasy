@@ -363,8 +363,8 @@ internal sealed class FacturacionConFalloControlado : IElectronicInvoiceService
 
     public Task<string> GenerarXmlAsync(ElectronicInvoiceRequest request) => _real.GenerarXmlAsync(request);
 
-    public Task<POS.Application.Validators.ValidationResult> ValidarXmlAsync(string xmlContent) =>
-        _real.ValidarXmlAsync(xmlContent);
+    public Task<POS.Application.Validators.ValidationResult> ValidarXmlAsync(string xmlContent, TipoeCFType tipo = TipoeCFType.FacturaConsumo) =>
+        _real.ValidarXmlAsync(xmlContent, tipo);
 
     public string GenerarHash(string xmlContent) => _real.GenerarHash(xmlContent);
 

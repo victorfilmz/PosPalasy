@@ -21,4 +21,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <!-- XSDs oficiales DGII: se copian al output para la validación de esquema por tipo (FASE 5). -->
+  <ItemGroup>
+    <None Include="..\..\documentacion xsd\**\*.xsd" Link="documentacion xsd\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

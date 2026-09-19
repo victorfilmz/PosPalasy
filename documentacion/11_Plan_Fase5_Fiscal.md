@@ -68,7 +68,30 @@ esta fase toca la atomicidad de la venta ni la política `ERROR → ESTADO CONSI
 
 ## 2. Sub-fases, entregables y gates
 
-### 5.0 — Contrato fiscal correcto: código de seguridad + mapa XSD (gate G0)
+### 5.0 — Contrato fiscal correcto: código de seguridad + mapa XSD (gate G0) ✅ EJECUTADA
+
+> **Gate G0 — PASS (2026-09-19).** Evidencia: 239/239 pruebas (70 dominio + 70 ventas + 99 seguridad/E2E),
+> build 0 errores/0 advertencias, arranque real contra SQL Server con 0 errores y XSDs oficiales copiados
+> al output de la aplicación.
+>
+> **Hallazgos de la ejecución (el detector hizo su trabajo):**
+> 1. El XML canónico **no** validaba contra el XSD oficial. Desviaciones corregidas: provincia en
+>    formato de 2 dígitos (el XSD exige 6: `010000`), teléfono del emisor fuera de
+>    `TablaTelefonoEmisor`, orden `IndicadorBienoServicio`/`DescripcionItem` invertido, y
+>    `FechaHoraFirma` + hueco `ds:Signature` ausentes (obligatorios en la secuencia de la raíz).
+> 2. El XSD exige **exactamente un elemento tras `FechaHoraFirma`**: la ranura de la firma
+>    XML-DSig. El serializer la emite vacía desde la construcción: el documento nace estructural
+>   mente completo y la firma (5.1) solo llena el hueco.
+> 3. El tipo 31 exige **`FechaVencimientoSecuencia`** (emisión + 6 meses): añadida.
+> 4. `MontoItem` del renglón pasa a ser el total de la línea **con** sus impuestos (única cifra
+>    coherente con `MontoTotal`); la validación XSD ahora está activa en `PrepararYRegistrarAsync`
+>    (`ERROR_XSD` revierte la venta; estado honesto `XsdValidado`).
+>
+> **Nota sobre B1:** el código de seguridad de 6 caracteres ya se emitía (la deuda del doc 07 §3
+> estaba parcialmente resuelta); ahora se genera **criptográficamente por comprobante**
+> (`GeneradorCodigoSeguridad`, sin caracteres ambiguos) en lugar de derivarse del XML, y la
+> integridad del documento queda a cargo de la firma (5.1). `ValidarXmlAsync` acepta el tipo del
+> comprobante; `HashGenerator` mantiene su contrato para la anulación.
 1. **B1**: corregir `CodigoSeguridadeCF` a 6 caracteres alfanuméricos. Decisión técnica a tomar con
    evidencia del XSD/KB: si es derivable (función de RNC+eNCF) se calcula; si es aleatorio se genera
    una vez, se persiste junto al comprobante y viaja en consultas. `XMLHash` (SHA-256) queda como
