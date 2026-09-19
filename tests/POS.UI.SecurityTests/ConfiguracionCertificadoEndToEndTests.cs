@@ -123,3 +123,83 @@ public class CertificadoAppFactory : PosAppFactory
 
     public void QuitarCertificado(string ruta) => File.Delete(ruta);
 }
+
+/// <summary>
+/// Fábrica E2E donde la contraseña configurada NO coincide con la del certificado instalado:
+/// reproduce el error operativo más común (contraseña del .pfx mal cargada en user-secrets).
+/// </summary>
+public class CertificadoPasswordErroneaFactory : CertificadoAppFactory
+{
+    private const string PasswordIncorrecta = "esta-no-es-la-clave-del-pfx";
+
+    protected override void ConfigureWebHost(IWebHostBuilder builder)
+    {
+        base.ConfigureWebHost(builder);
+
+        // Se añade DESPUÉS de la configuración de la base: esta fuente gana y la app intentará
+        // abrir el .pfx con una contraseña que no es la suya.
+        builder.ConfigureAppConfiguration((_, configuracion) =>
+        {
+            configuracion.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Certificado:Password"] = PasswordIncorrecta
+            });
+        });
+    }
+}
+
+/// <summary>
+/// E2E del caso borde más común de certificado: el archivo existe pero la contraseña configurada
+/// es errónea. El operador debe ver ANTES de vender que el sistema NO puede firmar y cuál es la
+/// causa exacta — no un aviso engañoso como "Certificado Expirado".
+/// </summary>
+public class ConfiguracionCertificadoPasswordErroneaTests : IClassFixture<CertificadoPasswordErroneaFactory>
+{
+    private readonly CertificadoPasswordErroneaFactory _app;
+
+    public ConfiguracionCertificadoPasswordErroneaTests(CertificadoPasswordErroneaFactory app) => _app = app;
+
+    private async Task<HttpClient> SesionSuperAdminAsync()
+    {
+        var cliente = _app.CrearCliente();
+
+        var html = await cliente.GetStringAsync("/Cuenta/Login");
+        var token = PosAppFactory.ExtraerTokenAntiforgery(html);
+
+        var respuesta = await cliente.PostAsync(
+            "/Cuenta/Login",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["Usuario"] = PosAppFactory.UsuarioAdmin,
+                ["Password"] = PosAppFactory.PasswordAdmin,
+                ["__RequestVerificationToken"] = token
+            }));
+
+        Assert.Equal(HttpStatusCode.Redirect, respuesta.StatusCode);
+        return cliente;
+    }
+
+    [Fact]
+    public async Task ConPasswordErronea_LaPantallaMuestraQueNoPuedeFirmarYLaCausa()
+    {
+        // El .pfx se exporta con SU contraseña correcta; la app está configurada con otra.
+        var ruta = _app.InstalarCertificadoDePrueba();
+        try
+        {
+            var cliente = await SesionSuperAdminAsync();
+            var html = await cliente.GetStringAsync("/Configuracion/Certificado");
+
+            // El aviso operativo es que NO puede firmar, con la causa exacta (contraseña).
+            Assert.Contains("El sistema NO puede firmar comprobantes.", html);
+            Assert.Contains("contraseña", html, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("No Puede Firmar", html);   // badge del encabezado
+
+            // Y la pantalla NO confirma la capacidad de firma.
+            Assert.DoesNotContain("El sistema puede firmar comprobantes", html);
+        }
+        finally
+        {
+            _app.QuitarCertificado(ruta);
+        }
+    }
+}

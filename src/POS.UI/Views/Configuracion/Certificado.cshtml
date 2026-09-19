@@ -35,6 +35,12 @@
                         <i class="bi bi-check-circle me-1"></i>Válido y Activo
                     </span>
                 }
+                else if (Model.TieneCertificado && !string.IsNullOrEmpty(Model.ErrorCarga))
+                {
+                    <span class="badge bg-warning-subtle text-dark border border-warning-subtle px-3 py-1 font-tabular">
+                        <i class="bi bi-exclamation-triangle me-1"></i>No Puede Firmar
+                    </span>
+                }
                 else if (Model.TieneCertificado && Model.EstaVigente && !Model.PuedeFirmar)
                 {
                     <span class="badge bg-warning-subtle text-dark border border-warning-subtle px-3 py-1 font-tabular">
