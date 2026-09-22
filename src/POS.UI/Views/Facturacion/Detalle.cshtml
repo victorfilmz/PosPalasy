@@ -11,7 +11,14 @@
         <div class="d-flex align-items-center gap-2">
             <h3 class="fw-bold text-dark mb-0">Comprobante @Model.eNCF</h3>
             <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-tabular">
-                @(Model.TipoeCF == TipoeCFType.FacturaConsumo ? "e-CF 32 Consumo" : "e-CF 31 Crédito Fiscal")
+                @(Model.TipoeCF switch
+                {
+                    TipoeCFType.FacturaCreditoFiscal => "e-CF 31 Crédito Fiscal",
+                    TipoeCFType.FacturaConsumo => "e-CF 32 Consumo",
+                    TipoeCFType.NotaDebito => "e-CF 33 Nota de Débito",
+                    TipoeCFType.NotaCredito => "e-CF 34 Nota de Crédito",
+                    _ => Model.TipoeCF.ToString()
+                })
             </span>
         </div>
         <p class="text-muted small mb-0 font-tabular">
@@ -47,6 +54,38 @@
         <a asp-action="Lista" class="btn btn-light border fw-semibold">Volver al listado</a>
     </div>
 </div>
+
+@if (Model.TipoeCF == TipoeCFType.NotaCredito && !string.IsNullOrEmpty(Model.eNCFModificado))
+{
+    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-warning-subtle">
+        <div class="card-body px-4 py-3">
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <h6 class="fw-bold mb-0 text-dark">
+                    <i class="bi bi-arrow-return-left me-2"></i>Nota de crédito — corrige al comprobante
+                </h6>
+                <span class="badge bg-dark font-tabular">@Model.eNCFModificado</span>
+                @if (!string.IsNullOrEmpty(Model.FechaNCFModificado))
+                {
+                    <span class="text-muted small">fecha del comprobante modificado: @Model.FechaNCFModificado</span>
+                }
+                @if (Model.CodigoModificacion.HasValue)
+                {
+                    var motivo = Model.CodigoModificacion.Value switch
+                    {
+                        1 => "anulación",
+                        2 => "corrección de texto",
+                        3 => "corrección de montos",
+                        4 => "sustitución",
+                        _ => string.Empty
+                    };
+                    <span class="badge bg-secondary">
+                        Código de modificación: @Model.CodigoModificacion@(!string.IsNullOrEmpty(motivo) ? $" ({motivo})" : string.Empty)
+                    </span>
+                }
+            </div>
+        </div>
+    </div>
+}
 
 <div class="row g-4 mb-4">
     <!-- Resumen y Trazabilidad -->
