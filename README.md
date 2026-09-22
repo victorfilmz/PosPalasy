@@ -102,7 +102,9 @@ dotnet test PosPalasy.slnx
 
 La documentación de diseño, arquitectura y mapeo XSD ↔ C# está en [`documentacion/`](documentacion/index.md).
 
-> **Aviso de fidelidad:** parte de la documentación de diseño describe la implementación **prevista**.
-> Las funciones fiscales marcadas como pendientes (firma XML-DSig integrada, validación XSD en el flujo
-> de emisión, ANECF conforme al esquema, autenticación DGII) **aún no están operativas**; consulte la
-> auditoría técnica antes de considerar el sistema apto para producción.
+> **Estado FASE 5 (fiscal): COMPLETADA — gate final PASS (22-09-2026).** Firma XML-DSig integrada,
+> validación XSD por tipo, autenticación DGII semilla→token, transmisión RFCE/e-CF con regla de 250k,
+> resultado fiscal completo, nota de crédito e-CF 34 desde devolución, ANECF de rangos y reutilización
+> de secuencias tras rechazo. Evidencia: 293/293 pruebas, build 0/0, arranque real 0 errores
+> ([informe del gate](documentacion/13_Gate_Final_Fase5.md)). El paso a producción requiere el
+> ejercicio real en `testecf` según el [hand-off de homologación](documentacion/12_HandOff_Homologacion_DGII.md).

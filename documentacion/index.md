@@ -13,6 +13,7 @@
 > 📁 [10_Caja_Devoluciones.md](10_Caja_Devoluciones.md) — **Caja: devoluciones transaccionales, reembolso, trazabilidad, arqueo y cierre**
 > 📁 [11_Plan_Fase5_Fiscal.md](11_Plan_Fase5_Fiscal.md) — **Plan FASE 5 fiscal: XML-DSig, XSD, autenticación DGII, ANECF (gates G0–G5)**
 > 📁 [12_HandOff_Homologacion_DGII.md](12_HandOff_Homologacion_DGII.md) — **Hand-off de homologación: checklist TestECF, certificado, plan de verificación y criterio de éxito**
+> 📁 [13_Gate_Final_Fase5.md](13_Gate_Final_Fase5.md) — **Gate final de FASE 5: informe, evidencia 293/293 y veredicto PASS**
 > 📁 [README.md](README.md) — Documentación principal y guía de inicio
 >
 > ---
@@ -62,18 +63,14 @@
 >
 > ---
 > ### Estado del Proyecto
-> | Fase | Estado | Duración estimada |
-> |------|--------|-------------------|
-> | Fase 1: Tipos básicos (Domain.Types) | 🟡 En progreso | 2 semanas |
-> | Fase 2: Contratos de interfaces | ⬜ Por comenzar | 3 semanas |
-> | Fase 3: Implementación DGII | ⬜ Por comenzar | 4 semanas |
-> | Fase 4: Integración BD | ⬜ Por comenzar | 2 semanas |
-> | Fase 5: Casos de uso | ⬜ Por comenzar | 3 semanas |
-> | Fase 6: UI integración | ⬜ Por comenzar | 2 semanas |
-> | Fase 7: Testing | ⬜ Por comenzar | 2 semanas |
-> | Fase 8: Documentación y despliegue | ⬜ Por comenzar | 1 semana |
+> | Fase | Estado | Referencia |
+> |------|--------|------------|
+> | Fase 1–4: Tipos, contratos, DGII base, BD y venta transaccional | ✅ Completadas (gates previos) | docs 05–10 |
+> | Fase 5: Integración fiscal (XSD, firma, autenticación, RFCE/e-CF, NC 34, ANECF, secuencias) | ✅ **Completada — gate final PASS** | docs 11 y 13 |
+> | Fase 6: Integración UI / reportes 606-607-IT-1 | ⬜ Pendiente de autorización | — |
 >
-> **Total estimado:** 19 semanas (~4.5 meses) con equipo completo.
+> **Nota:** el plan de 19 semanas de esta página es el estimado histórico del diseño; la ejecución real
+> por fases y gates quedó registrada en los informes citados.
 >
 > ---
 > ### Empezar a trabajar

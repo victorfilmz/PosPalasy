@@ -689,7 +689,8 @@ END
         }
 
         // 4. Sucursal por Defecto
-        var defaultEnterprise = await context.Enterprises.FirstOrDefaultAsync();
+        // Orden determinista: la consulta de arranque no debe depender del orden físico de la tabla.
+        var defaultEnterprise = await context.Enterprises.OrderBy(e => e.Id).FirstOrDefaultAsync();
         Sucursal? defaultSucursal = null;
         if (defaultEnterprise != null)
         {

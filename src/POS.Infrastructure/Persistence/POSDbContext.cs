@@ -369,6 +369,7 @@ public class POSDbContext : DbContext
             b.Property(c => c.VentasTarjeta).HasPrecision(18, 2);
             b.Property(c => c.VentasTransferencia).HasPrecision(18, 2);
             b.Property(c => c.TotalVentas).HasPrecision(18, 2);
+            b.Property(c => c.TotalDevoluciones).HasPrecision(18, 2);
             b.Property(c => c.TotalEntradasEfectivo).HasPrecision(18, 2);
             b.Property(c => c.TotalSalidasEfectivo).HasPrecision(18, 2);
             b.Property(c => c.MontoRealCierre).HasPrecision(18, 2);

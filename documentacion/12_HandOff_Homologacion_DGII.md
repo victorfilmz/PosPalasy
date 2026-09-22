@@ -96,5 +96,5 @@ ejercitados sin pérdida ni duplicación de comprobantes.
 | Quién | Qué |
 |---|---|
 | **Operación** | Certificado vigente + habilitación del RNC + acceso a testecf + eNCF activas |
-| **Código (FASE 5)** | Completa: 5.0–5.5 ejecutadas (gates G0–G5 PASS); pendiente solo el ejercicio real con credenciales TestECF |
+| **Código (FASE 5)** | Completa: 5.0–5.5 ejecutadas (gates G0–G5 PASS) y gate final 5.6 PASS (293/293, build 0/0, arranque real 0 errores — doc 13); pendiente solo el ejercicio real con credenciales TestECF |
 | **Conjunto** | Ejecutar el plan de verificación §4 en testecf; registrar respuestas reales y ajustar contratos si difieren de la KB |
