@@ -14,6 +14,13 @@ public class ElectronicInvoice : BaseEntity
     public int? VentaId { get; set; }
     public Venta? Venta { get; set; }
 
+    /// <summary>
+    /// Devolución que origina el comprobante (nota de crédito e-CF 34). Null en comprobantes de
+    /// venta; la devolución queda saldada fiscalmente cuando su nota de crédito es confirmada.
+    /// </summary>
+    public int? DevolucionId { get; set; }
+    public Devolucion? Devolucion { get; set; }
+
     public TipoeCFType TipoeCF { get; set; } = TipoeCFType.FacturaConsumo;
     public string eNCF { get; set; } = string.Empty;
     public string Version { get; set; } = "1.0";
@@ -88,6 +95,15 @@ public class ElectronicInvoice : BaseEntity
 
     public string? MotivoRechazo { get; set; }
     public string? MotivoAnulacion { get; set; }
+
+    /// <summary>e-NCF del comprobante modificado (nota de crédito/debito): referencia fiscal obligatoria de la corrección.</summary>
+    public string? eNCFModificado { get; set; }
+
+    /// <summary>Código de modificación (1=Anula, 2=Corrige texto, 3=Corrige montos).</summary>
+    public int? CodigoModificacion { get; set; }
+
+    /// <summary>Fecha de emisión del comprobante modificado (DD-MM-AAAA).</summary>
+    public string? FechaNCFModificado { get; set; }
 
     // Acuses de Recibo y Aprobación Comercial
     public string? ARECFXML { get; set; }

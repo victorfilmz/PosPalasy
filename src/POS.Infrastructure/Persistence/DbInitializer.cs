@@ -302,6 +302,29 @@ BEGIN
     CREATE UNIQUE INDEX [IX_Devoluciones_ClaveIdempotencia] ON [Devoluciones] ([ClaveIdempotencia]);
     CREATE INDEX [IX_Devoluciones_VentaId] ON [Devoluciones] ([VentaId]);
 END
+-- Referencia fiscal de la nota de crédito (Fase 5.4): la devolución que origina el e-CF 34 y el
+-- comprobante original modificado (InformacionReferencia del XSD e-CF 34).
+IF EXISTS (SELECT * FROM sys.tables WHERE name = 'ElectronicInvoices')
+    AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[ElectronicInvoices]') AND name = 'DevolucionId')
+    ALTER TABLE [ElectronicInvoices] ADD [DevolucionId] int NULL
+        CONSTRAINT [FK_ElectronicInvoices_Devoluciones_DevolucionId] REFERENCES [Devoluciones] ([Id]) ON DELETE SET NULL;
+IF EXISTS (SELECT * FROM sys.tables WHERE name = 'ElectronicInvoices')
+    AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[ElectronicInvoices]') AND name = 'eNCFModificado')
+    ALTER TABLE [ElectronicInvoices] ADD [eNCFModificado] nvarchar(13) NULL;
+IF EXISTS (SELECT * FROM sys.tables WHERE name = 'ElectronicInvoices')
+    AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[ElectronicInvoices]') AND name = 'CodigoModificacion')
+    ALTER TABLE [ElectronicInvoices] ADD [CodigoModificacion] int NULL;
+IF EXISTS (SELECT * FROM sys.tables WHERE name = 'ElectronicInvoices')
+    AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[ElectronicInvoices]') AND name = 'FechaNCFModificado')
+    ALTER TABLE [ElectronicInvoices] ADD [FechaNCFModificado] nvarchar(10) NULL;
+
+-- Serie E34 (nota de crédito electrónica): la numeración fiscal de las devoluciones.
+IF EXISTS (SELECT * FROM sys.tables WHERE name = 'SecuenciasECF')
+    AND NOT EXISTS (SELECT 1 FROM [SecuenciasECF] WHERE [Serie] = 'E34')
+    INSERT INTO [SecuenciasECF] ([Serie],[TipoECF],[Ultimo],[DesdeAutorizado],[HastaAutorizado],[Version],[FechaActualizacion])
+    VALUES ('E34', 34, 0, 1, NULL, NEWID(), GETUTCDATE());
+
+-- Renglones de la devolución (FASE 4): snapshot prorrateado de las líneas vendidas.
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'DevolucionItems')
 BEGIN
     CREATE TABLE [DevolucionItems] (
@@ -422,6 +445,13 @@ IF EXISTS (SELECT * FROM sys.tables WHERE name = 'SecuenciasECF')
     AND NOT EXISTS (SELECT 1 FROM [SecuenciasECF] WHERE [Serie] = 'E32')
     INSERT INTO [SecuenciasECF] ([Serie],[TipoECF],[Ultimo],[DesdeAutorizado],[HastaAutorizado],[Version],[FechaActualizacion])
     VALUES ('E32', 32, 0, 1, NULL, NEWID(), GETUTCDATE());
+
+-- Una devolución tiene UNA nota de crédito (idempotencia física de la emisión fiscal, Fase 5.4).
+-- Va en ESTE lote y no en el del ALTER: SQL Server compila el lote completo y un índice sobre una
+-- columna creada en el mismo lote falla con ""Invalid column name"".
+IF EXISTS (SELECT * FROM sys.tables WHERE name = 'ElectronicInvoices')
+    AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ElectronicInvoices_DevolucionId' AND object_id = OBJECT_ID(N'[ElectronicInvoices]'))
+    CREATE UNIQUE INDEX [IX_ElectronicInvoices_DevolucionId] ON [ElectronicInvoices] ([DevolucionId]) WHERE [DevolucionId] IS NOT NULL;
 
 -- Política de stock (Fase 3): migración del booleano anterior a la política, en un lote posterior
 -- a la creación de la columna. PermitirVentaSinStock true -> Permitir (0); false -> Bloquear (2).

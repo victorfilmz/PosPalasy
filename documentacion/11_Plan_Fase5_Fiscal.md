@@ -172,14 +172,32 @@ esta fase toca la atomicidad de la venta ni la política `ERROR → ESTADO CONSI
 > 5. Configuración realineada (`"DGII:Ambiente": "TestECF"`), pantalla de Certificado muestra el
 >    host e-CF real del ambiente; conectividad contra `ecf.dgii.gov.do/testecf`.
 
-### 5.4 — ANECF: nota de crédito desde devolución (gate G4)
-1. **B8**: serializer ANECF completo según `ANECF v.1.0.xsd` (datos del comprobante referenciado,
-   montos por forma de pago del desglose de la devolución — FASE 4 ya los calcula).
-2. Caso de uso: `RegistrarDevolucion` marca la venta como "requiere NC"; generación/envío de ANECF
-   como paso posterior (no dentro de la transacción de la devolución), con autorización
-   `Supervision` y outbox propio.
-3. **Gate G4:** ANECF valida contra su XSD; el flujo devolución→NC funciona en simulador; el tope de
-   reembolso y la idempotencia de devolución quedan intactos.
+### 5.4 — Nota de crédito desde devolución (gate G4) ✅ EJECUTADA
+
+> **Corrección fiscal del plan (documentada en el gate):** la evidencia del XSD `ANECF v.1.0.xsd` y
+> de la KB demostró que el ANECF anula RANGOS de secuencias NO utilizadas y **no** es la nota de
+> crédito de una devolución. La corrección de un comprobante se documenta con un **e-CF 34 (Nota de
+> Crédito)** con `InformacionReferencia` al original; el ANECF queda para la anulación de rangos.
+>
+> **Gate G4 — PASS (2026-09-21).** Evidencia: 8 pruebas nuevas — 6 XSD reales del tipo 34 (nota
+> canónica, `InformacionReferencia` en el orden del esquema, `IndicadorNotaCredito` obligatorio,
+> rechazo sin referencia, rechazo por `CodigoModificacion` fuera de catálogo, rama del tipo 32
+> intacta) + 2 de integración SQLite (devolución total → nota por el total con referencia completa
+> y encolada; devolución parcial → nota por lo devuelto + reintento idempotente), suite 277/277,
+> build 0 errores/0 advertencias, arranque real 0 errores.
+>
+> **Diseño implementado:**
+> 1. Caso de uso `EmitirNotaCreditoDevolucionHandler` con autorización `Supervision`: UNA
+>    transacción (ancla de serialización sobre la devolución + serie E34 + validación XSD oficial +
+>    registro local + outbox), transmisión post-commit vía cola de emisión.
+> 2. Idempotencia de dos niveles: verificación transaccional (una devolución, UNA nota) respaldada
+>    por el índice único filtrado `IX_ElectronicInvoices_DevolucionId`, con su código de conflicto
+>    mapeado (`IDEMPOTENCIA_NOTA_CREDITO`). El tope de reembolso y la idempotencia de devolución
+>    (FASE 4) quedan intactos.
+> 3. Fiscalidad: `IndicadorNotaCredito` 0/1 según los 30 días normativos (decisión del código, no de
+>    UI), `CodigoModificacion=3` (corrige montos), renglones heredados de la devolución con el
+>    tratamiento fiscal de cada línea vendida (la nota revierte exactamente el impuesto cobrado;
+>    el ajuste de redondeo cae siempre en una línea gravada).
 
 ### 5.5 — Secuencia ante rechazo (gate G5)
 1. **B9**: al recibir `secuenciaUtilizada=false` con rechazo corregible, registrar la secuencia como

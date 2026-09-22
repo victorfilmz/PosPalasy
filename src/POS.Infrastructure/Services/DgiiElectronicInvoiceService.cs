@@ -159,6 +159,12 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
         var invoiceEntity = new ElectronicInvoice
         {
             VentaId = command.VentaId,
+            DevolucionId = command.DevolucionId,
+            // Referencia fiscal al comprobante modificado (notas de crédito/débito): la traza
+            // local replica la InformacionReferencia del XML.
+            eNCFModificado = req.NCFModificado,
+            CodigoModificacion = req.CodigoModificacion,
+            FechaNCFModificado = req.FechaNCFModificado,
             TipoeCF = req.TipoeCF,
             eNCF = req.eNCF,
             Version = req.Version,

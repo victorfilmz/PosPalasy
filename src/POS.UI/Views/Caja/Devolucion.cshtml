@@ -5,6 +5,9 @@
     ViewData["Title"] = "Devolución de venta";
     var turnoActivo = (CajaTurno?)ViewBag.TurnoActivo;
     var venta = (Venta?)ViewBag.Venta;
+    var devoluciones = ViewBag.Devoluciones as List<Devolucion> ?? new();
+    var notasPorDevolucion = ViewBag.NotasPorDevolucion as Dictionary<int, ElectronicInvoice?>
+        ?? new Dictionary<int, ElectronicInvoice?>();
 }
 
 <div class="container-fluid px-4 py-4">
@@ -64,6 +67,47 @@
                             <dt class="col-5">Cajero</dt>
                             <dd class="col-7 mb-0">@venta.Usuario ?? "—"</dd>
                         </dl>
+                    }
+
+                    @if (devoluciones.Count > 0)
+                    {
+                        <hr />
+                        <h6 class="text-muted mb-2">Devoluciones registradas y su nota de crédito</h6>
+                        <table class="table table-sm align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th>#</th>
+                                    <th class="text-end">Total</th>
+                                    <th>Estado fiscal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var devolucion in devoluciones)
+                                {
+                                    var nota = notasPorDevolucion.GetValueOrDefault(devolucion.Id);
+                                    <tr>
+                                        <td>@devolucion.Id</td>
+                                        <td class="text-end">RD$ @devolucion.TotalDevuelto.ToString("N2")</td>
+                                        <td>
+                                            @if (nota != null)
+                                            {
+                                                <span class="badge bg-success">NC @nota.eNCF</span>
+                                                <span class="small text-muted d-block">Emitida — en cola de transmisión a la DGII</span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-warning text-dark">Pendiente de nota de crédito</span>
+                                                <form method="post" asp-controller="Facturacion" asp-action="EmitirNotaCredito"
+                                                      asp-route-devolucionId="@devolucion.Id" class="mt-1">
+                                                    @Html.AntiForgeryToken()
+                                                    <button type="submit" class="btn btn-sm btn-outline-primary">Emitir nota de crédito</button>
+                                                </form>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
                     }
                 </div>
             </div>

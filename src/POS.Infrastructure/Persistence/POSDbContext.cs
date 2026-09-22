@@ -292,6 +292,19 @@ public class POSDbContext : DbContext
                 .WithOne(v => v.ElectronicInvoice)
                 .HasForeignKey<ElectronicInvoice>(ei => ei.VentaId)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            // La nota de crédito nace de una devolución (Fase 4): la referencia es la traza del origen.
+            b.HasOne(ei => ei.Devolucion)
+                .WithMany()
+                .HasForeignKey(ei => ei.DevolucionId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            // Una devolución tiene UNA nota de crédito: el índice único es el respaldo físico de la
+            // regla (la verificación transaccional del caso de uso no alcanza sola bajo concurrencia).
+            b.HasIndex(ei => ei.DevolucionId)
+                .IsUnique()
+                .HasFilter("[DevolucionId] IS NOT NULL")
+                .HasDatabaseName("IX_ElectronicInvoices_DevolucionId");
         });
 
         // InvoiceItem

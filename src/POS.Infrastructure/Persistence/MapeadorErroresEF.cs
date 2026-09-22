@@ -30,6 +30,11 @@ internal static class MapeadorErroresEF
                 "El número de comprobante asignado ya existe: otra venta lo tomó primero.",
                 CodigosConflicto.EncfDuplicado);
 
+        if (Coincide(detalle, "IX_ElectronicInvoices_DevolucionId") || Coincide(detalle, "ElectronicInvoices.DevolucionId"))
+            return new ConflictoDeUnicidadException(
+                "La devolución ya tiene su nota de crédito emitida.",
+                CodigosConflicto.IdempotenciaNotaCredito);
+
         if (Coincide(detalle, "SecuenciasECF") || Coincide(detalle, "IX_SecuenciasECF_Serie"))
             return new ConflictoDeUnicidadException(
                 "La serie de comprobantes ya está registrada en la base de datos.",

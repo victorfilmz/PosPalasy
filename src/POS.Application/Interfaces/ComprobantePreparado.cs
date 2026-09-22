@@ -24,4 +24,5 @@ public sealed record ComprobantePreparado(
 /// </summary>
 /// <param name="Request">Datos fiscales del comprobante (totales ya calculados por el dominio).</param>
 /// <param name="VentaId">Venta de origen, si el comprobante nace de una venta de POS.</param>
-public sealed record PrepararComprobanteCommand(ElectronicInvoiceRequest Request, int? VentaId);
+/// <param name="DevolucionId">Devolución de origen, si el comprobante es la nota de crédito de una devolución.</param>
+public sealed record PrepararComprobanteCommand(ElectronicInvoiceRequest Request, int? VentaId, int? DevolucionId = null);

@@ -43,10 +43,16 @@ public class ElectronicInvoiceRequest
     public string Moneda { get; set; } = "DOP";
     public TipoMonedaType? MonedaExtranjera { get; set; }
     public decimal? TipoCambio { get; set; }
+
+    // Referencia fiscal al comprobante modificado (nota de crédito e-CF 34 / débito e-CF 33):
+    // IndicadorNotaCredito es obligatorio en el IdDoc del tipo 34 (0 = dentro de 30 días).
+    public int? IndicadorNotaCredito { get; set; }
+    public string? FechaNCFModificado { get; set; }
     public decimal? TotalEnMonedaExtranjera { get; set; }
 
-    // Información de referencia (para Notas de Crédito/Débito)
-    public string? CodigoModificacion { get; set; }
+    // Información de referencia (para Notas de Crédito/Débito). CodigoModificacion según el XSD 34:
+    // 1=Anula, 2=Corrige texto, 3=Corrige montos, 4=Reemplazo de contingencia.
+    public int? CodigoModificacion { get; set; }
     public string? NCFModificado { get; set; }
     public string? MotivoModificacion { get; set; }
 

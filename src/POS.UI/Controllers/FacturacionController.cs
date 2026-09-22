@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using POS.Application.CasosDeUso.Facturacion;
 using POS.Application.DTOs;
 using POS.Application.Interfaces;
 using POS.Application.Services;
@@ -24,17 +25,20 @@ public class FacturacionController : Controller
     private readonly IEnterpriseRepository _enterpriseRepo;
     private readonly IAnulacionRepository _anulacionRepo;
     private readonly IElectronicInvoiceService _invoiceService;
+    private readonly EmitirNotaCreditoDevolucionHandler _notaCreditoHandler;
 
     public FacturacionController(
         IInvoiceRepository invoiceRepo,
         IEnterpriseRepository enterpriseRepo,
         IAnulacionRepository anulacionRepo,
-        IElectronicInvoiceService invoiceService)
+        IElectronicInvoiceService invoiceService,
+        EmitirNotaCreditoDevolucionHandler notaCreditoHandler)
     {
         _invoiceRepo = invoiceRepo;
         _enterpriseRepo = enterpriseRepo;
         _anulacionRepo = anulacionRepo;
         _invoiceService = invoiceService;
+        _notaCreditoHandler = notaCreditoHandler;
     }
 
     public async Task<IActionResult> Lista(EstadoFacturaElectronica? estado = null)
@@ -69,6 +73,27 @@ public class FacturacionController : Controller
             return NotFound();
 
         return View(invoice);
+    }
+
+    /// <summary>
+    /// Emite la nota de crédito e-CF 34 de una devolución registrada (5.4). El caso de uso es
+    /// idempotente: reintentar sobre una devolución ya saldada devuelve la nota original.
+    /// </summary>
+    [HttpPost]
+    [Authorize(Policy = Politicas.Supervision)]
+    public async Task<IActionResult> EmitirNotaCredito(int devolucionId)
+    {
+        var resultado = await _notaCreditoHandler.EjecutarAsync(new NotaCreditoDevolucionCommand
+        {
+            DevolucionId = devolucionId,
+            UsuarioNombre = SesionUsuario.ObtenerNombre(User) ?? string.Empty
+        });
+
+        TempData[resultado.Exitoso ? "Mensaje" : "Error"] = resultado.Mensaje;
+
+        return resultado.ElectronicInvoiceId > 0
+            ? RedirectToAction(nameof(Detalle), new { id = resultado.ElectronicInvoiceId })
+            : RedirectToAction(nameof(Lista));
     }
 
     [HttpPost]

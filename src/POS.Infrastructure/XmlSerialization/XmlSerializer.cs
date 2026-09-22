@@ -28,11 +28,18 @@ public class XmlSerializer : IXmlSerializer
     {
         if (request == null) throw new ArgumentNullException(nameof(request));
 
+        // e-CF 34 (Nota de Crédito): el XSD exige InformacionReferencia tras DetallesItems y antes
+        // de FechaHoraFirma. Es una referencia obligatoria al comprobante modificado: sin ella la
+        // DGII no puede vincular la corrección con su original.
+        var esNotaCredito = request.TipoeCF == TipoeCFType.NotaCredito
+            && !string.IsNullOrWhiteSpace(request.NCFModificado);
+
         var doc = new XDocument(
             new XDeclaration("1.0", "utf-8", "yes"),
             new XElement("ECF",
                 CrearEncabezado(request),
                 CrearDetallesItems(request),
+                esNotaCredito ? CrearInformacionReferencia(request) : null,
                 // FechaHoraFirma es obligatoria en el XSD (patrón dd-MM-yyyy HH:mm:ss).
                 new XElement("FechaHoraFirma", DateTime.UtcNow.ToString("dd-MM-yyyy HH:mm:ss", Inv)),
                 // El XSD exige exactamente un elemento tras FechaHoraFirma: el espacio reservado
@@ -54,10 +61,16 @@ public class XmlSerializer : IXmlSerializer
         var encabezado = new XElement("Encabezado",
             new XElement("Version", req.Version),
             
-            // IdDoc
+            // IdDoc — la secuencia del XSD 34 exige IndicadorNotaCredito INMEDIATAMENTE después de
+            // eNCF (antes de TipoIngresos/TipoPago): la posición es parte del contrato del esquema.
             new XElement("IdDoc",
                 new XElement("TipoeCF", (int)req.TipoeCF),
                 new XElement("eNCF", req.eNCF),
+                // Nota de crédito (e-CF 34): IndicadorNotaCredito es OBLIGATORIO en el IdDoc.
+                // 0 = emitida dentro de los 30 días del comprobante modificado; 1 = después.
+                req.TipoeCF == TipoeCFType.NotaCredito && req.IndicadorNotaCredito.HasValue
+                    ? new XElement("IndicadorNotaCredito", req.IndicadorNotaCredito.Value)
+                    : null,
                 // El tipo 31 (crédito fiscal) exige la fecha de vencimiento de la secuencia del eNCF:
                 // la normativa le da 6 meses de vigencia desde la emisión.
                 req.TipoeCF == TipoeCFType.FacturaCreditoFiscal
@@ -169,6 +182,21 @@ public class XmlSerializer : IXmlSerializer
         );
 
         return doc.Declaration + Environment.NewLine + doc.ToString(SaveOptions.DisableFormatting);
+    }
+
+    /// <summary>
+    /// InformacionReferencia del e-CF 34: referencia al comprobante modificado. Orden exigido por
+    /// la secuencia del XSD: NCFModificado → FechaNCFModificado → CodigoModificacion →
+    /// RazonModificacion. NCFModificado admite 11..19 caracteres (e-NCF de 13 o NCF antiguo).
+    /// </summary>
+    private static XElement CrearInformacionReferencia(ElectronicInvoiceRequest req)
+    {
+        return new XElement("InformacionReferencia",
+            new XElement("NCFModificado", req.NCFModificado),
+            CrearOpcional("FechaNCFModificado", req.FechaNCFModificado),
+            new XElement("CodigoModificacion", (req.CodigoModificacion ?? 3).ToString(Inv)),
+            CrearOpcional("RazonModificacion", req.MotivoModificacion)
+        );
     }
 
     private static XElement? CrearOpcional(string nombre, string? valor)

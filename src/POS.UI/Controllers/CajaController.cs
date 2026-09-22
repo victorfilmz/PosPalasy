@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
@@ -21,6 +22,7 @@ public class CajaController : Controller
     private readonly IEnterpriseRepository _enterpriseRepo;
     private readonly IDevolucionRepository _devolucionRepo;
     private readonly IVentaRepository _ventaRepo;
+    private readonly IInvoiceRepository _invoiceRepo;
     private readonly RegistrarDevolucionHandler _registrarDevolucion;
 
     public CajaController(
@@ -28,12 +30,14 @@ public class CajaController : Controller
         IEnterpriseRepository enterpriseRepo,
         IDevolucionRepository devolucionRepo,
         IVentaRepository ventaRepo,
+        IInvoiceRepository invoiceRepo,
         RegistrarDevolucionHandler registrarDevolucion)
     {
         _cajaRepo = cajaRepo;
         _enterpriseRepo = enterpriseRepo;
         _devolucionRepo = devolucionRepo;
         _ventaRepo = ventaRepo;
+        _invoiceRepo = invoiceRepo;
         _registrarDevolucion = registrarDevolucion;
     }
 
@@ -235,6 +239,15 @@ public class CajaController : Controller
         {
             var venta = await _ventaRepo.GetWithItemsAsync(ventaId.Value);
             ViewBag.Venta = venta;
+
+            // Estado fiscal de cada devolución de la venta (5.4): su nota de crédito si ya existe.
+            var devoluciones = await _devolucionRepo.GetByVentaIdAsync(ventaId.Value);
+            var notasPorDevolucion = new Dictionary<int, Domain.Entities.ElectronicInvoice?>();
+            foreach (var devolucion in devoluciones)
+                notasPorDevolucion[devolucion.Id] = await _invoiceRepo.GetByDevolucionIdAsync(devolucion.Id);
+
+            ViewBag.Devoluciones = devoluciones;
+            ViewBag.NotasPorDevolucion = notasPorDevolucion;
         }
 
         return View();

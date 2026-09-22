@@ -14,6 +14,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using POS.Application.CasosDeUso.Ventas;
 using POS.Application.CasosDeUso.Caja;
+using POS.Application.CasosDeUso.Facturacion;
 using POS.Application.Interfaces;
 using POS.Application.Security;
 using POS.Application.Services;
@@ -132,6 +133,7 @@ builder.Services.AddScoped<IDevolucionRepository, POS.Infrastructure.Persistence
 builder.Services.AddScoped<IUnidadDeTrabajo, UnidadDeTrabajo>();
 builder.Services.AddScoped<ProcesarVentaHandler>();
 builder.Services.AddScoped<RegistrarDevolucionHandler>();
+builder.Services.AddScoped<EmitirNotaCreditoDevolucionHandler>();
 
 // Servicio Orquestador de Facturación Electrónica DGII. La firma XML-DSig (sub-fase 5.1) exige el
 // certificado del emisor y el modo de operación (simulador/real): registro explícito para inyectarlos.

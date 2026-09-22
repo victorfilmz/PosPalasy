@@ -56,6 +56,9 @@ public static class CodigosConflicto
     /// <summary>Ya existe una devolución con la misma clave de idempotencia (Fase 4).</summary>
     public const string IdempotenciaDevolucion = "IDEMPOTENCIA_DEVOLUCION";
 
+    /// <summary>La devolución ya tiene su nota de crédito emitida (una devolución, una nota).</summary>
+    public const string IdempotenciaNotaCredito = "IDEMPOTENCIA_NOTA_CREDITO";
+
     /// <summary>Otro conflicto de unicidad no clasificado.</summary>
     public const string Generico = "CONFLICTO_UNICIDAD";
 }
