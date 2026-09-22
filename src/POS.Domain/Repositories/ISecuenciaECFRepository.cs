@@ -15,6 +15,11 @@ public interface ISecuenciaECFRepository
     /// Reserva y devuelve el siguiente eNCF de la serie indicada. Debe ejecutarse dentro de la
     /// transacción de la venta y resolver las carreras con reintento acotado.
     /// </summary>
+    /// <remarks>
+    /// La asignación consume PRIMERO el pool de secuencias liberadas por rechazo corregible
+    /// (<c>secuenciaUtilizada=false</c>, sub-fase 5.5) y solo si está vacío avanza el contador de la
+    /// serie: la numeración fiscal no quema números que la DGII declaró reutilizables.
+    /// </remarks>
     /// <exception cref="Common.ReglaDeNegocioException">
     /// Si la serie no tiene secuencia configurada, si se agotó el rango autorizado o si no fue
     /// posible asignar un número tras varios intentos por concurrencia.

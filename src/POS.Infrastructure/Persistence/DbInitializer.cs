@@ -324,6 +324,30 @@ IF EXISTS (SELECT * FROM sys.tables WHERE name = 'SecuenciasECF')
     INSERT INTO [SecuenciasECF] ([Serie],[TipoECF],[Ultimo],[DesdeAutorizado],[HastaAutorizado],[Version],[FechaActualizacion])
     VALUES ('E34', 34, 0, 1, NULL, NEWID(), GETUTCDATE());
 
+-- Pool de secuencias devueltas al stock tras rechazo corregible (Fase 5.5):
+-- secuenciaUtilizada=false significa que la DGII declaró el número reutilizable.
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'SecuenciasLibres')
+BEGIN
+    CREATE TABLE [SecuenciasLibres] (
+        [Id] int NOT NULL IDENTITY,
+        [Serie] nvarchar(3) NOT NULL,
+        [Numero] bigint NOT NULL,
+        [ENCF] nvarchar(13) NOT NULL,
+        [FacturaRechazadaId] int NOT NULL,
+        [FechaLiberacionUtc] datetime2 NOT NULL,
+        [LiberadaPor] nvarchar(100) NULL,
+        [MotivoRechazo] nvarchar(500) NULL,
+        [Consumida] bit NOT NULL DEFAULT 0,
+        [FechaConsumoUtc] datetime2 NULL,
+        [CreatedAt] datetime2 NOT NULL DEFAULT (GETUTCDATE()),
+        [UpdatedAt] datetime2 NULL,
+        CONSTRAINT [PK_SecuenciasLibres] PRIMARY KEY ([Id])
+    );
+    CREATE UNIQUE INDEX [IX_SecuenciasLibres_Serie_Numero_Activa]
+        ON [SecuenciasLibres] ([Serie], [Numero]) WHERE [Consumida] = 0;
+    CREATE INDEX [IX_SecuenciasLibres_Cola] ON [SecuenciasLibres] ([Serie], [Consumida], [FechaLiberacionUtc]);
+END
+
 -- Renglones de la devolución (FASE 4): snapshot prorrateado de las líneas vendidas.
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'DevolucionItems')
 BEGIN
@@ -445,6 +469,17 @@ IF EXISTS (SELECT * FROM sys.tables WHERE name = 'SecuenciasECF')
     AND NOT EXISTS (SELECT 1 FROM [SecuenciasECF] WHERE [Serie] = 'E32')
     INSERT INTO [SecuenciasECF] ([Serie],[TipoECF],[Ultimo],[DesdeAutorizado],[HastaAutorizado],[Version],[FechaActualizacion])
     VALUES ('E32', 32, 0, 1, NULL, NEWID(), GETUTCDATE());
+
+-- Unicidad de la numeración VIGENTE (Fase 5.5): un rechazo con secuenciaUtilizada=false devuelve
+-- el número al pool y el comprobante rechazado conserva su e-NCF para trazabilidad, de modo que el
+-- índice único general se REPLANTEA como filtrado que excluye los rechazados (Estado=2). La base
+-- nace con el índice filtrado desde EnsureCreated; esta migración cubre las bases previas.
+IF EXISTS (SELECT * FROM sys.tables WHERE name = 'ElectronicInvoices')
+    AND EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_ElectronicInvoices_eNCF' AND object_id = OBJECT_ID(N'[ElectronicInvoices]'))
+BEGIN
+    DROP INDEX [IX_ElectronicInvoices_eNCF] ON [ElectronicInvoices];
+    CREATE UNIQUE INDEX [IX_ElectronicInvoices_eNCF] ON [ElectronicInvoices] ([eNCF]) WHERE [Estado] <> 2;
+END
 
 -- Una devolución tiene UNA nota de crédito (idempotencia física de la emisión fiscal, Fase 5.4).
 -- Va en ESTE lote y no en el del ALTER: SQL Server compila el lote completo y un índice sobre una

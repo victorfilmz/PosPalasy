@@ -63,6 +63,8 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
     private readonly IInvoiceRepository _invoiceRepository;
     private readonly IAnulacionRepository _anulacionRepository;
     private readonly IEmisionDGIIQueueRepository _queueRepository;
+    private readonly ISecuenciaLibreRepository? _secuenciasLibresRepo;
+    private readonly IAuditoriaRepository? _auditoriaRepository;
     private readonly ILogger<DgiiElectronicInvoiceService> _logger;
     private readonly string _xsdBasePath;
 
@@ -79,7 +81,9 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
         ISecurityCodeGenerator? codigoSeguridad = null,
         IProveedorCertificadoDigital? proveedorCertificado = null,
         IFirmadorComprobanteECF? firmador = null,
-        DgiiConfig? dgiiConfig = null)
+        DgiiConfig? dgiiConfig = null,
+        ISecuenciaLibreRepository? secuenciasLibresRepository = null,
+        IAuditoriaRepository? auditoriaRepository = null)
     {
         _xmlSerializer = xmlSerializer ?? throw new ArgumentNullException(nameof(xmlSerializer));
         _xmlValidator = xmlValidator ?? throw new ArgumentNullException(nameof(xmlValidator));
@@ -93,6 +97,8 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
         _proveedorCertificado = proveedorCertificado;
         _firmador = firmador;
         _simulador = dgiiConfig?.ModoSimulador ?? false;
+        _secuenciasLibresRepo = secuenciasLibresRepository;
+        _auditoriaRepository = auditoriaRepository;
 
         _xsdBasePath = xsdBasePath ?? Path.Combine(AppContext.BaseDirectory, "documentacion xsd");
     }
@@ -427,6 +433,9 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
                 // La recepción RFCE entrega el RESULTADO FISCAL definitivo en la misma respuesta
                 // (Aceptado / Aceptado Condicional / Rechazado): se consolida de inmediato.
                 ConsolidarEstadoFiscal(invoice, respuesta);
+                // Sub-fase 5.5: rechazo corregible ⇒ la secuencia vuelve al pool de reutilización.
+                await LiberarSecuenciaDelPoolSiCorrespondeAsync(
+                    invoice, respuesta.SecuenciaUtilizada, cancellationToken);
             }
             else
             {
@@ -460,6 +469,10 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
             invoice.Estado = EstadoFacturaElectronica.Rechazado;
             invoice.MotivoRechazo = respuesta.Mensaje;
             AvanzarEstado(invoice, EstadoEmisionECF.ErrorPermanente);
+            // Sub-fase 5.5: rechazo en recepción ⇒ la DGII no consumió el número; sin marca
+            // explícita (respuesta sin cuerpo fiscal) se interpreta como secuencia NO utilizada.
+            await LiberarSecuenciaDelPoolSiCorrespondeAsync(
+                invoice, respuesta.SecuenciaUtilizada, cancellationToken);
         }
 
         await _invoiceRepository.UpdateAsync(invoice, cancellationToken);
@@ -666,6 +679,10 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
                     invoice.EstadoEmision = EstadoEmisionECF.ConfirmadaEnvio;
             }
 
+            // Sub-fase 5.5: la consulta de resultado puede traer el rechazo definitivo.
+            await LiberarSecuenciaDelPoolSiCorrespondeAsync(
+                invoice, dgiiResp.SecuenciaUtilizada, cancellationToken);
+
             await _invoiceRepository.UpdateAsync(invoice, cancellationToken);
         }
 
@@ -715,6 +732,10 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
                     invoice.EstadoEmision = EstadoEmisionECF.ConfirmadaEnvio;
             }
 
+            // Sub-fase 5.5: la consulta RFCE puede traer el rechazo definitivo.
+            await LiberarSecuenciaDelPoolSiCorrespondeAsync(
+                invoice, dgiiResp.SecuenciaUtilizada, cancellationToken);
+
             await _invoiceRepository.UpdateAsync(invoice, cancellationToken);
         }
 
@@ -754,6 +775,74 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
     /// </summary>
     private static bool EsRFCE(ElectronicInvoice invoice) =>
         invoice.TipoeCF == TipoeCFType.FacturaConsumo && invoice.MontoTotal < DgiiApiClient.UmbralECF;
+
+    /// <summary>
+    /// Sub-fase 5.5: al confirmarse un rechazo con <c>secuenciaUtilizada=false</c> (o sin marca
+    /// explícita: la DGII solo envía true cuando consumió el número), la secuencia del comprobante
+    /// rechazado vuelve al pool de reutilización, con auditoría en la misma transacción.
+    /// <c>secuenciaUtilizada=true</c> o null antes de cualquier transmisión NO liberan nada.
+    /// </summary>
+    private async Task LiberarSecuenciaDelPoolSiCorrespondeAsync(
+        ElectronicInvoice invoice,
+        bool? secuenciaUtilizada,
+        CancellationToken cancellationToken)
+    {
+        if (_secuenciasLibresRepo is null)
+            return;
+
+        if (invoice.Estado != EstadoFacturaElectronica.Rechazado)
+            return;
+
+        // true = la DGII consumió el número: NUNCA se libera. null antes de salir a la red tampoco
+        // llega aquí (no hay estado Rechazado sin transmisión).
+        if (secuenciaUtilizada == true)
+            return;
+
+        var serie = SecuenciaECF.SerieDe(invoice.TipoeCF);
+        var numero = ParsearSecuencia(serie, invoice.eNCF);
+        if (numero is null)
+            return;
+
+        var libre = await _secuenciasLibresRepo.LiberarAsync(
+            serie,
+            numero.Value,
+            invoice.Id,
+            invoice.MotivoRechazo ?? invoice.MensajesDgii ?? string.Empty,
+            liberadaPor: "sistema",
+            ct: cancellationToken);
+
+        _logger.LogInformation(
+            "Secuencia {ENCF} devuelta al pool tras rechazo (fila {FilaId}). Motivo DGII: {Motivo}",
+            libre.ENCF,
+            libre.Id,
+            libre.MotivoRechazo);
+
+        if (_auditoriaRepository is not null)
+        {
+            await _auditoriaRepository.RegistrarAsync(new AuditoriaCambio
+            {
+                Usuario = "sistema",
+                Entidad = "ElectronicInvoice",
+                Campo = "SecuenciaUtilizada",
+                ValorAnterior = invoice.eNCF,
+                ValorNuevo = "liberada (secuenciaUtilizada=" + (secuenciaUtilizada?.ToString() ?? "null") + ")",
+                Motivo = Truncar(invoice.MotivoRechazo ?? invoice.MensajesDgii ?? "Rechazo DGII", 500)
+            }, cancellationToken);
+        }
+    }
+
+    /// <summary>Extrae el número de secuencia de un e-NCF; null si el formato no corresponde a la serie.</summary>
+    private static long? ParsearSecuencia(string serie, string eNCF)
+    {
+        if (string.IsNullOrWhiteSpace(eNCF) || eNCF.Length <= serie.Length ||
+            !eNCF.StartsWith(serie, StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        return long.TryParse(eNCF[serie.Length..], out var numero) ? numero : null;
+    }
+
+    private static string Truncar(string texto, int maximo) =>
+        texto.Length <= maximo ? texto : texto[..maximo];
 
     /// <summary>
     /// Consolida el resultado fiscal de la DGII en el estado local: Aceptado (1), Aceptado

@@ -199,11 +199,30 @@ esta fase toca la atomicidad de la venta ni la política `ERROR → ESTADO CONSI
 >    tratamiento fiscal de cada línea vendida (la nota revierte exactamente el impuesto cobrado;
 >    el ajuste de redondeo cae siempre en una línea gravada).
 
-### 5.5 — Secuencia ante rechazo (gate G5)
-1. **B9**: al recibir `secuenciaUtilizada=false` con rechazo corregible, registrar la secuencia como
-   **reutilizable** (fila de hueco en `SecuenciasECF` o marca en el comprobante), con auditoría; la
-   reasignación respeta el índice único y la serialización de FASE 3.
-2. **Gate G5:** prueba: rechazo → siguiente venta reutiliza la secuencia liberada; 0 duplicados.
+### 5.5 — Secuencia ante rechazo (gate G5) ✅ EJECUTADA
+
+> **Gate G5 — PASS (2026-09-21).** Evidencia: 5 pruebas nuevas de integración SQLite — rechazo con
+> `secuenciaUtilizada=false` ⇒ la siguiente asignación REUTILIZA el número (pool consumido antes que
+> el contador, fila marcada y auditoría persistida); `secuenciaUtilizada=true` ⇒ no libera nada;
+> rechazo en recepción sin marca ⇒ se interpreta como no utilizada; comprobante aceptado ⇒ nunca
+> libera; reutilización en cadena con barrera física (índice único filtrado: el rechazado no bloquea
+> la reutilización, dos vigentes jamás comparten número). Suite 282/282, build 0/0, arranque real 0
+> errores.
+>
+> **Diseño implementado (B9 cerrada):**
+> 1. **Pool persistente `SecuenciasLibres`**: cada liberación es una fila de hueco con auditoría
+>    (comprobante rechazado, motivo DGII, quién/cuándo) e idempotencia propia (índice único filtrado
+>    sobre serie+número activos). El consumo es una MARCA dentro de la transacción del emisor: un
+>    rollback devuelve la secuencia al pool junto con todo lo demás, y el historial queda auditable.
+> 2. **Asignación con pool primero**: `AsignarSiguienteENCFAsync` consume el pool FIFO antes de
+>    avanzar el contador de la serie — la numeración no quema números que la DGII declaró
+>    reutilizables, respetando la serialización de FASE 3.
+> 3. **Índice único REPLANTEADO por la realidad fiscal**: `[eNCF]` es único solo entre comprobantes
+>    no rechazados (filtro `[Estado] <> 2`, migración incluida para bases previas). El rechazado
+>    conserva su e-NCF para trazabilidad; la unicidad vigente sigue respaldada físicamente.
+> 4. **Ganchos de liberación en los 4 puntos donde la DGII confirma el rechazo**: recepción RFCE,
+>    rechazo en recepción (HTTP 4xx), consulta e-CF por TrackId y consulta RFCE. Regla única:
+>    estado Rechazado + `secuenciaUtilizada != true` ⇒ liberar con auditoría en la misma operación.
 
 ### 5.6 — Gate final de FASE 5
 - Suite completa (≥ 232 previas + ~25 nuevas), build 0/0, arranque real, informe con el formato de

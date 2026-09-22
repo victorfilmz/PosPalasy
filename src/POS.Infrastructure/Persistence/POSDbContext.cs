@@ -27,6 +27,7 @@ public class POSDbContext : DbContext
     public DbSet<Usuario> Usuarios => Set<Usuario>();
     public DbSet<SecuenciaECF> SecuenciasECF => Set<SecuenciaECF>();
     public DbSet<AuditoriaCambio> AuditoriaCambios => Set<AuditoriaCambio>();
+    public DbSet<SecuenciaLibre> SecuenciasLibres => Set<SecuenciaLibre>();
     public DbSet<Devolucion> Devoluciones => Set<Devolucion>();
     public DbSet<DevolucionItem> DevolucionesItems => Set<DevolucionItem>();
 
@@ -82,6 +83,20 @@ public class POSDbContext : DbContext
         });
 
         // Sucursal
+        modelBuilder.Entity<SecuenciaLibre>(b =>
+        {
+            b.HasKey(sl => sl.Id);
+            b.Property(sl => sl.Serie).HasMaxLength(3).IsRequired();
+            b.Property(sl => sl.ENCF).HasMaxLength(13).IsRequired();
+            b.Property(sl => sl.LiberadaPor).HasMaxLength(100);
+            b.Property(sl => sl.MotivoRechazo).HasMaxLength(500);
+            // Dos filas libres para la misma secuencia de la misma serie: defecto. La idempotencia
+            // de LiberarAsync lo evita en aplicación; el índice lo respalda físicamente.
+            b.HasIndex(sl => new { sl.Serie, sl.Numero, sl.Consumida })
+                .IsUnique()
+                .HasFilter("[Consumida] = 0");
+        });
+
         modelBuilder.Entity<Sucursal>(b =>
         {
             b.HasKey(s => s.Id);
@@ -284,9 +299,13 @@ public class POSDbContext : DbContext
             b.Property(ei => ei.MontoImpuestoAdicional).HasPrecision(18, 2);
             b.Property(ei => ei.MontoTotal).HasPrecision(18, 2);
 
-            b.HasIndex(ei => ei.eNCF).IsUnique();
-            b.HasIndex(ei => ei.Estado);
-            b.HasIndex(ei => ei.RNCEmisor);
+            // Unicidad de la numeración VIGENTE: un rechazo con secuenciaUtilizada=false devuelve
+            // el número al pool (5.5) y el comprobante rechazado conserva su e-NCF para trazabilidad;
+            // el índice único filtrado excluye rechazados para permitir la reutilización declarada
+            // por la DGII sin renunciar a la barrera física contra duplicados.
+            b.HasIndex(ei => ei.eNCF)
+                .IsUnique()
+                .HasFilter("[Estado] <> 2");
 
             b.HasOne(ei => ei.Venta)
                 .WithOne(v => v.ElectronicInvoice)

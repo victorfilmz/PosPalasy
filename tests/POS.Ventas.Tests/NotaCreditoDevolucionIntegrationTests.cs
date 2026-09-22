@@ -74,7 +74,7 @@ public class NotaCreditoDevolucionIntegrationTests
         return new EmitirNotaCreditoDevolucionHandler(
             new DevolucionRepository(contexto),
             new CommonRepositories(contexto),
-            new SecuenciaECFRepository(contexto),
+            new SecuenciaECFRepository(contexto, new SecuenciaLibreRepository(contexto)),
             new InvoiceRepository(contexto),
             new EmisionDGIIQueueRepository(contexto),
             servicio,

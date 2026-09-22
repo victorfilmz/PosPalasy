@@ -188,7 +188,7 @@ internal sealed class VentasTestHarness : IAsyncDisposable
             comun,
             comun,
             comun,
-            new SecuenciaECFRepository(contexto),
+            new SecuenciaECFRepository(contexto, new SecuenciaLibreRepository(contexto)),
             new InventarioAlmacenRepository(contexto),
             comun,
             new CajaTurnoRepository(contexto),

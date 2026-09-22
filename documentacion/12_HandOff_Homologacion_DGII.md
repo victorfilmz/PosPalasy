@@ -21,7 +21,7 @@
 | Transmisión real RFCE/e-CF según regla de 250k | ✅ Implementada (5.3) | Multipart con nombre oficial `RNC+eNCF.xml`; hosts/rutas oficiales derivados del ambiente (`ecf.`/`fc.dgii.gov.do`). |
 | Resultado fiscal completo (`codigo`, `mensajes[]`, `secuenciaUtilizada`) | ✅ Implementado (5.3) | RFCE consolida el veredicto en la misma recepción; e-CF por consulta de resultado (`?trackid=`); traza persistida en el comprobante. |
 | Nota de crédito de devolución (e-CF 34) | ✅ Demostrado en pruebas (XSD oficial + integración) | Gate G4 — sub-fase **5.4** |
-| Reutilización de secuencia tras rechazo | ⛔ Pendiente | Sub-fase **5.5** |
+| Reutilización de secuencia tras rechazo | ✅ Demostrado en pruebas (pool + auditoría + índice filtrado) | Gate G5 — sub-fase **5.5** |
 
 Suite actual: **258/258 pruebas** · build 0/0 · arranque real contra SQL Server verificado.
 
@@ -96,5 +96,5 @@ ejercitados sin pérdida ni duplicación de comprobantes.
 | Quién | Qué |
 |---|---|
 | **Operación** | Certificado vigente + habilitación del RNC + acceso a testecf + eNCF activas |
-| **Código (FASE 5)** | Sub-fase 5.5 (secuencia ante rechazo) antes del primer envío real — 5.4 ejecutada (gate G4 PASS) |
+| **Código (FASE 5)** | Completa: 5.0–5.5 ejecutadas (gates G0–G5 PASS); pendiente solo el ejercicio real con credenciales TestECF |
 | **Conjunto** | Ejecutar el plan de verificación §4 en testecf; registrar respuestas reales y ajustar contratos si difieren de la KB |

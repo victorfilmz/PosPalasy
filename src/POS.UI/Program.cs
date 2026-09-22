@@ -125,6 +125,7 @@ builder.Services.AddScoped<IProveedorRepository, ProveedorRepository>();
 builder.Services.AddScoped<IEmisionDGIIQueueRepository, EmisionDGIIQueueRepository>();
 builder.Services.AddScoped<IUsuarioRepository, UsuarioRepository>();
 builder.Services.AddScoped<IAutenticacionService, AutenticacionService>();
+builder.Services.AddScoped<ISecuenciaLibreRepository, SecuenciaLibreRepository>();
 builder.Services.AddScoped<ISecuenciaECFRepository, SecuenciaECFRepository>();
 builder.Services.AddScoped<IAuditoriaRepository, POS.Infrastructure.Persistence.Repositories.AuditoriaRepository>();
 builder.Services.AddScoped<IDevolucionRepository, POS.Infrastructure.Persistence.Repositories.DevolucionRepository>();
@@ -152,7 +153,9 @@ builder.Services.AddScoped<IElectronicInvoiceService>(sp => new DgiiElectronicIn
     codigoSeguridad: sp.GetRequiredService<ISecurityCodeGenerator>(),
     proveedorCertificado: sp.GetRequiredService<IProveedorCertificadoDigital>(),
     firmador: sp.GetRequiredService<IFirmadorComprobanteECF>(),
-    dgiiConfig: dgiiConfig));
+    dgiiConfig: dgiiConfig,
+    secuenciasLibresRepository: sp.GetRequiredService<ISecuenciaLibreRepository>(),
+    auditoriaRepository: sp.GetRequiredService<IAuditoriaRepository>()));
 
 // Servicio en segundo plano para resiliencia y cola offline DGII
 builder.Services.AddHostedService<POS.UI.Services.DgiiQueueBackgroundService>();

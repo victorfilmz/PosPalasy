@@ -31,15 +31,26 @@ public sealed class SecuenciaECFRepository : ISecuenciaECFRepository
     private const int MaxIntentosAsignacion = 5;
 
     private readonly POSDbContext _context;
+    private readonly ISecuenciaLibreRepository _libresRepo;
 
-    public SecuenciaECFRepository(POSDbContext context)
+    public SecuenciaECFRepository(POSDbContext context, ISecuenciaLibreRepository libresRepo)
     {
         _context = context;
+        _libresRepo = libresRepo;
     }
 
     public async Task<string> AsignarSiguienteENCFAsync(TipoeCFType tipo, CancellationToken ct = default)
     {
         var serie = SecuenciaECF.SerieDe(tipo);
+
+        // Pool de secuencias liberadas por rechazo corregible (secuenciaUtilizada=false) ANTES de
+        // avanzar el contador: la DGII declaró que ese número puede reutilizarse y la numeración no
+        // debe quemar números innecesariamente. La marca de consumo corre dentro de la transacción
+        // ambiente: un rollback de la venta devuelve la secuencia al pool. El índice único filtrado
+        // de ElectronicInvoices.eNCF es la última barrera contra cualquier duplicado.
+        var libre = await _libresRepo.ConsumirAsync(serie, ct);
+        if (libre is not null)
+            return libre.ENCF;
 
         for (var intento = 1; intento <= MaxIntentosAsignacion; intento++)
         {
