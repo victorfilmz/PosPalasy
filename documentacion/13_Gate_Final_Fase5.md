@@ -67,8 +67,8 @@ cambio de esquema ni de comportamiento:
   `ProveedorCertificadoDigital`, `ConsolidadorResultadoFiscal`, `LiberadorSecuencias`,
   `PoliticaRecepcion`). Lo descartable (`DgiiElectronicInvoiceService.REESCRITO`,
   repositorios paralelos, `eNCF` de 12 caracteres, contexto paralelo, tipos decimales duplicados)
-  permanece en cuarentena **solo como registro histórico** y no compila con la solución.
-  Recomendación: eliminarlo en el siguiente commit de limpieza (decisión del propietario).
+  permaneció en cuarentena **solo como registro histórico** (no compilaba con la solución);
+  **eliminada el 22-09-2026** por decisión del propietario — este informe es su registro.
 - `HERMES_STUDY_MODE_*.md` y `KNOWLEDGE_BASE/` — material de estudio DGII sin impacto en la
   solución. Se sugiere versionarlo como documentación o moverlo fuera del repositorio.
 - `docs/superpowers/` — ignorado por `.gitignore`.
