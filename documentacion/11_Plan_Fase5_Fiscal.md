@@ -31,7 +31,7 @@
 | B5 | **Un solo camino de recepción**: la regla de negocio (factura de consumo < RD$ 250.000 → RFCE; ≥ 250.000 y demás tipos → e-CF completo) no está implementada | `api_rest.md` §4.2/§4.3 |
 | B6 | **Resultado fiscal no modelado**: solo `trackId + Estado(string)`; faltan `codigo` (1=Aceptado, 2=Aceptado Condicional, 3=Rechazado), `mensajes[]` y `secuenciaUtilizada` | `api_rest.md` §4.3 |
 | B7 | **XSD solo para tipo 32, ruta hardcodeada**: faltan 31/33/34 y mapa `TipoeCF → archivo XSD` | `ValidarXmlAsync` |
-| B8 | **ANECF incompleto**: sin datos de referencia del comprobante anulado (eNCF, monto, fecha, RNC), sin serializer ni envío real | `AnularAsync` (parte del servicio), XSD `ANECF v.1.0.xsd` disponible |
+| B8 | **ANECF incompleto**: sin serializer conforme al XSD ni envío real | `AnularAsync` (parte del servicio), XSD `ANECF v.1.0.xsd` disponible — **CERRADA en 5.4/5.6**: el ANECF anula RANGOS de secuencias no utilizadas (su serializer valida contra el XSD oficial y va al endpoint oficial); la corrección de un comprobante NO es un ANECF sino un e-CF 34 con `InformacionReferencia` (ver gate G4) |
 | B9 | **Secuencia ante rechazo**: `secuenciaUtilizada=false` implica que la secuencia PUEDE reutilizarse tras un rechazo corregible; hoy la secuencia solo avanza | interacción con diseño FASE 3 |
 
 ### 0.3 WIP cuarentenado (`_wip_fase5/`) — veredicto de rescate
@@ -54,8 +54,9 @@
 
 **IN (FASE 5):** pipeline fiscal completo ejecutable en **homologación (TestECF)**: XSD por tipo,
 firma XML-DSig integrada, autenticación semilla→token, transmisión RFCE/e-CF según regla de 250k,
-captura completa del resultado fiscal, ANECF funcional para nota de crédito desde devolución,
-política de secuencia ante rechazo y corrección del código de seguridad.
+captura completa del resultado fiscal, anulación de rangos de secuencias (ANECF) conforme a su XSD
+y la nota de crédito desde devolución como **e-CF 34 con `InformacionReferencia`** (no ANECF: ver
+corrección de diseño del gate G4), política de secuencia ante rechazo y corrección del código de seguridad.
 
 **OUT (fases posteriores):** producción real (requiere certificación con la DGII), portal de
 consultas, reportes 606/607/IT-1, régimen de contingencia completo (solo se documenta la máquina de

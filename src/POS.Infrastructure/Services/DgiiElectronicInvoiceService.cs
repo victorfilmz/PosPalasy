@@ -118,6 +118,27 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
         return Task.FromResult(result);
     }
 
+    /// <summary>
+    /// Ruta del XSD oficial de la anulación de rangos (ANECF v.1.0), con la misma resolución que
+    /// los comprobantes: output de la aplicación primero y directorio de datos como respaldo.
+    /// </summary>
+    private string RutaXsdAnulacion()
+    {
+        const string nombre = "ANECF v.1.0.xsd";
+
+        var candidatas = new[]
+        {
+            Path.Combine(AppContext.BaseDirectory, "documentacion xsd", nombre),
+            Path.Combine(_xsdBasePath, nombre)
+        };
+
+        var ruta = candidatas.FirstOrDefault(File.Exists)
+            ?? throw new FileNotFoundException(
+                $"No se encontró el XSD oficial de anulación ({nombre}). Revisar la copia al output.");
+
+        return ruta;
+    }
+
     public string GenerarHash(string xmlContent)
     {
         return _hashGenerator.Generate(xmlContent);
@@ -551,6 +572,12 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
         return await EnviarAsync(preparado.ElectronicInvoiceId, cancellationToken);
     }
 
+    /// <summary>
+    /// Anulación de RANGOS de secuencias no utilizadas (ANECF). El XML se valida contra el XSD
+    /// oficial ANECF v.1.0 antes de transmitir; el veredicto de la DGII se consolida HONESTAMENTE:
+    /// <c>Exitoso</c> refleja la aceptación de la DGII (no solo el registro local), y el comprobante
+    /// local solo se marca <c>Anulado</c> cuando la DGII aceptó la solicitud.
+    /// </summary>
     public async Task<AnulacionResponse> AnularAsync(AnulacionRequest request, CancellationToken cancellationToken = default)
     {
         var valResult = AnulacionValidator.Validar(request);
@@ -563,8 +590,22 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
             };
         }
 
-        // 1. Serializar XML de Anulación (ANECF)
+        // 1. Serializar XML de Anulación (ANECF) y validarlo contra el XSD oficial.
         var xml = _xmlSerializer.SerializeAnulacion(request);
+        var validacion = _xmlValidator.Validate(xml, RutaXsdAnulacion());
+        if (!validacion.EsValido)
+        {
+            _logger.LogError(
+                "ANECF inválido contra el XSD oficial: {Errores}",
+                string.Join(" | ", validacion.Errores));
+            return new AnulacionResponse
+            {
+                Exitoso = false,
+                Mensaje = "El XML de anulación no cumple el esquema oficial ANECF: " +
+                    string.Join(" | ", validacion.Errores)
+            };
+        }
+
         var hash = _hashGenerator.Generate(xml);
 
         // 2. Enviar a DGII: multipart con el nombre oficial RNC+eNCF.xml al endpoint de anulación de rangos
@@ -573,7 +614,7 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
             DgiiApiClient.CrearNombreArchivoXml(request.RNCEmisor, request.eNCFDesde),
             cancellationToken);
 
-        // 3. Persistir registro de Anulación
+        // 3. Persistir registro de Anulación (con el resultado fiscal honesto de la DGII).
         var anulacionEntity = new Anulacion
         {
             RNCEmisor = request.RNCEmisor,
@@ -593,23 +634,30 @@ public class DgiiElectronicInvoiceService : IElectronicInvoiceService
 
         await _anulacionRepository.AddAsync(anulacionEntity, cancellationToken);
 
-        // 4. Actualizar factura electrónica correspondiente si existe localmente
-        var invoice = await _invoiceRepository.GetByENCFAsync(request.eNCFDesde, cancellationToken);
-        if (invoice != null)
+        // 4. Los comprobantes cuya secuencia cae dentro del rango anulado quedan Anulados cuando la
+        // DGII ACEPTÓ la solicitud; con rechazo o fallo de transmisión conservan su estado fiscal
+        // vigente y el intento queda auditable en el registro de anulación.
+        if (dgiiResp.EsExitoso)
         {
-            invoice.Estado = EstadoFacturaElectronica.Anulado;
-            invoice.MotivoAnulacion = request.Motivo;
-            invoice.FechaAnulacion = DateTime.UtcNow;
-            await _invoiceRepository.UpdateAsync(invoice, cancellationToken);
+            var enRango = await _invoiceRepository.GetByRangoENCFAsync(
+                request.eNCFDesde, request.eNCFHasta, cancellationToken);
+
+            foreach (var invoice in enRango.Where(i => i.Estado != EstadoFacturaElectronica.Anulado))
+            {
+                invoice.Estado = EstadoFacturaElectronica.Anulado;
+                invoice.MotivoAnulacion = request.Motivo;
+                invoice.FechaAnulacion = DateTime.UtcNow;
+                await _invoiceRepository.UpdateAsync(invoice, cancellationToken);
+            }
         }
 
         return new AnulacionResponse
         {
-            Exitoso = true,
+            Exitoso = dgiiResp.EsExitoso,
             TrackId = dgiiResp.TrackId,
             Mensaje = dgiiResp.EsExitoso
                 ? "Anulación procesada y aceptada por la DGII."
-                : $"Anulación registrada localmente. Pendiente confirmación DGII: {dgiiResp.Mensaje}"
+                : $"Anulación rechazada o con fallo de transmisión: {dgiiResp.Mensaje}"
         };
     }
 

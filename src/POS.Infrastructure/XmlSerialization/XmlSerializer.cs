@@ -163,6 +163,13 @@ public class XmlSerializer : IXmlSerializer
         return itemsElement;
     }
 
+    /// <summary>
+    /// ANECF (anulación de rangos de secuencias NO utilizadas) conforme al XSD oficial:
+    /// <c>Encabezado(Version/RncEmisor/CantidadeNCFAnulados/FechaHoraAnulacioneNCF)</c> +
+    /// <c>DetalleAnulacion/Anulacion(NoLinea/TipoeCF/TablaRangoSecuenciasAnuladaseNCF/CantidadeNCFAnulados)</c>
+    /// + el espacio reservado de la firma XML-DSig (elemento final obligatorio). No es la nota de
+    /// crédito de una devolución: eso es un e-CF 34 con InformacionReferencia (ver 5.4).
+    /// </summary>
     public string SerializeAnulacion(AnulacionRequest request)
     {
         if (request == null) throw new ArgumentNullException(nameof(request));
@@ -170,14 +177,26 @@ public class XmlSerializer : IXmlSerializer
         var doc = new XDocument(
             new XDeclaration("1.0", "utf-8", "yes"),
             new XElement("ANECF",
-                new XElement("RNCEmisor", request.RNCEmisor),
-                new XElement("TipoeCF", (int)request.TipoeCF),
-                new XElement("eNCFDesde", request.eNCFDesde),
-                new XElement("eNCFHasta", request.eNCFHasta),
-                new XElement("CantidadSecuencias", request.CantidadSecuencias),
-                new XElement("CodigoMotivoAnulacion", request.CodigoMotivoAnulacion),
-                new XElement("Motivo", request.Motivo),
-                new XElement("FechaHoraAnulacion", DateTime.UtcNow.ToString("dd-MM-yyyy HH:mm:ss"))
+                new XElement("Encabezado",
+                    new XElement("Version", "1.0"),
+                    new XElement("RncEmisor", request.RNCEmisor),
+                    new XElement("CantidadeNCFAnulados", request.CantidadSecuencias.ToString(Inv)),
+                    new XElement("FechaHoraAnulacioneNCF", DateTime.UtcNow.ToString("dd-MM-yyyy HH:mm:ss", Inv))
+                ),
+                new XElement("DetalleAnulacion",
+                    new XElement("Anulacion",
+                        new XElement("NoLinea", "1"),
+                        new XElement("TipoeCF", (int)request.TipoeCF),
+                        new XElement("TablaRangoSecuenciasAnuladaseNCF",
+                            new XElement("Secuencias",
+                                new XElement("SecuenciaeNCFDesde", request.eNCFDesde),
+                                new XElement("SecuenciaeNCFHasta", request.eNCFHasta)
+                            )
+                        ),
+                        new XElement("CantidadeNCFAnulados", request.CantidadSecuencias.ToString(Inv))
+                    )
+                ),
+                new XElement(Ds + "Signature")
             )
         );
 

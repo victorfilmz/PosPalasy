@@ -263,4 +263,87 @@ public class ValidacionXsdOficialTests
         // El mapa cubre los 10 tipos; se comprueba el comportamiento defensivo con un valor fuera.
         Assert.Throws<ReglaDeNegocioException>(() => MapaXsdComprobante.ArchivoDe((TipoeCFType)99));
     }
+
+    // ------------------------------------------------------------------ ANECF (anulación de rangos)
+
+    /// <summary>Ruta del XSD oficial de la anulación de rangos desde el directorio de salida.</summary>
+    private static string RutaXsdAnecf()
+    {
+        var ruta = Path.Combine(AppContext.BaseDirectory, "documentacion xsd", "ANECF v.1.0.xsd");
+        Assert.True(File.Exists(ruta), $"No se encontró el XSD ANECF en {ruta}. Revisar la copia al output del csproj.");
+        return ruta;
+    }
+
+    /// <summary>Request canónico de anulación de un rango de 3 secuencias del tipo 32.</summary>
+    private static AnulacionRequest AnulacionCanonica() => new()
+    {
+        RNCEmisor = "13100000001",
+        TipoeCF = TipoeCFType.FacturaConsumo,
+        eNCFDesde = "E320000000001",
+        eNCFHasta = "E320000000003",
+        CantidadSecuencias = 3,
+        CodigoMotivoAnulacion = 5,
+        Motivo = "Secuencias no utilizadas (prueba)"
+    };
+
+    [Fact]
+    public void AnecfCanonico_ValidaContraElXsdOficial()
+    {
+        var xml = _serializer.SerializeAnulacion(AnulacionCanonica());
+
+        var resultado = _validator.Validate(xml, RutaXsdAnecf());
+        Assert.True(resultado.EsValido,
+            "El ANECF canónico debe validar contra el XSD oficial. Errores: " +
+            string.Join(" | ", resultado.Errores));
+    }
+
+    [Fact]
+    public void Anecf_RespetaElOrdenYAnidamientoDelEsquema()
+    {
+        var xml = _serializer.SerializeAnulacion(AnulacionCanonica());
+        var doc = System.Xml.Linq.XDocument.Parse(xml);
+        var ns = doc.Root!.Name.Namespace;
+
+        // Encabezado en el orden del XSD: Version → RncEmisor → CantidadeNCFAnulados →
+        // FechaHoraAnulacioneNCF.
+        var encabezado = doc.Root.Element("Encabezado");
+        Assert.NotNull(encabezado);
+        Assert.Equal(new[] { "Version", "RncEmisor", "CantidadeNCFAnulados", "FechaHoraAnulacioneNCF" },
+            encabezado!.Elements().Select(e => e.Name.LocalName));
+        Assert.Equal("1.0", encabezado.Element("Version")!.Value);
+
+        // DetalleAnulacion → Anulacion → NoLinea → TipoeCF → TablaRangoSecuenciasAnuladaseNCF →
+        // CantidadeNCFAnulados.
+        var anulacion = doc.Root.Element("DetalleAnulacion")?.Element("Anulacion");
+        Assert.NotNull(anulacion);
+        Assert.Equal(new[] { "NoLinea", "TipoeCF", "TablaRangoSecuenciasAnuladaseNCF", "CantidadeNCFAnulados" },
+            anulacion!.Elements().Select(e => e.Name.LocalName));
+        Assert.Equal("1", anulacion.Element("NoLinea")!.Value);
+        Assert.Equal(32, (int)anulacion.Element("TipoeCF")!);
+
+        var rango = anulacion.Element("TablaRangoSecuenciasAnuladaseNCF")?.Element("Secuencias");
+        Assert.NotNull(rango);
+        Assert.Equal("E320000000001", rango!.Element("SecuenciaeNCFDesde")!.Value);
+        Assert.Equal("E320000000003", rango.Element("SecuenciaeNCFHasta")!.Value);
+
+        // El elemento final del documento es la ranura de la firma XML-DSig.
+        var ultimo = doc.Root.Elements().Last();
+        Assert.Equal("Signature", ultimo.Name.LocalName);
+        Assert.Equal("http://www.w3.org/2000/09/xmldsig#", ultimo.Name.NamespaceName);
+    }
+
+    [Fact]
+    public void AnecfSinEncabezado_FallaElXsd()
+    {
+        // Detector: un ANECF sin Encabezado (la forma antigua del serializer) no es un documento
+        // válido ante la DGII.
+        const string xmlAntiguo = @"<?xml version=""1.0"" encoding=""utf-8""?>
+<ANECF><RNCEmisor>13100000001</RNCEmisor><TipoeCF>32</TipoeCF>
+<eNCFDesde>E320000000001</eNCFDesde><eNCFHasta>E320000000003</eNCFHasta>
+<CantidadSecuencias>3</CantidadSecuencias></ANECF>";
+
+        var resultado = _validator.Validate(xmlAntiguo, RutaXsdAnecf());
+        Assert.False(resultado.EsValido,
+            "La forma antigua (plana, sin Encabezado ni DetalleAnulacion) NO debe validar contra el XSD.");
+    }
 }

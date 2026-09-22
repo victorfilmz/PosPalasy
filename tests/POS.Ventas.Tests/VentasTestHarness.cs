@@ -353,8 +353,26 @@ internal sealed class ClienteDgiiFalso : IDgiiApiClient
     public Task<DgiiApiResponse> EnviarAprobacionComercialAsync(string xml, string nombreArchivo, CancellationToken ct = default) =>
         Task.FromResult(ProximaRespuesta);
 
-    public Task<DgiiApiResponse> EnviarAnulacionAsync(string xml, string nombreArchivo, CancellationToken ct = default) =>
-        Task.FromResult(ProximaRespuesta);
+    /// <summary>Respuesta del envío de anulación de rangos (endpoint oficial ANECF).</summary>
+    public DgiiApiResponse RespuestaAnulacion { get; set; } = new()
+    {
+        EsExitoso = true,
+        CodigoHttp = 200,
+        TrackId = "TRACK-ANUL-0001",
+        Mensaje = "Solicitud de anulación recibida (prueba)"
+    };
+
+    public int AnulacionesEnviadas { get; private set; }
+    public string? UltimoXmlAnulacion { get; private set; }
+    public string? UltimoNombreArchivoAnulacion { get; private set; }
+
+    public Task<DgiiApiResponse> EnviarAnulacionAsync(string xml, string nombreArchivo, CancellationToken ct = default)
+    {
+        AnulacionesEnviadas++;
+        UltimoXmlAnulacion = xml;
+        UltimoNombreArchivoAnulacion = nombreArchivo;
+        return Task.FromResult(RespuestaAnulacion);
+    }
 
     public Task<DgiiApiResponse> ConsultarRFCEAsync(string rncEmisor, string encf, string codigoSeguridad, CancellationToken ct = default) =>
         Task.FromResult(RespuestaConsultaRFCE);

@@ -22,6 +22,13 @@ public interface IInvoiceRepository
 
     /// <summary>Nota de crédito emitida para una devolución (idempotencia de la emisión fiscal).</summary>
     Task<ElectronicInvoice?> GetByDevolucionIdAsync(int devolucionId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Comprobantes cuya secuencia cae dentro del rango de e-NCF indicado (ambos inclusive):
+    /// los que una anulación de rangos (ANECF) deja sin efecto fiscal.
+    /// </summary>
+    Task<IEnumerable<ElectronicInvoice>> GetByRangoENCFAsync(string eNCFDesde, string eNCFHasta, CancellationToken ct = default);
+
     Task<IEnumerable<ElectronicInvoice>> GetByRNCAsync(string rnc, TipoeCFType? tipo = null, CancellationToken ct = default);
     Task<IEnumerable<ElectronicInvoice>> GetByEstadoAsync(EstadoFacturaElectronica estado, CancellationToken ct = default);
     Task<IEnumerable<ElectronicInvoice>> GetPendingAsync(CancellationToken ct = default);

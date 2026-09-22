@@ -55,6 +55,19 @@ public class InvoiceRepository : IInvoiceRepository
             .FirstOrDefaultAsync(i => i.DevolucionId == devolucionId, ct);
     }
 
+    public async Task<IEnumerable<ElectronicInvoice>> GetByRangoENCFAsync(
+        string eNCFDesde, string eNCFHasta, CancellationToken ct = default)
+    {
+        // Todos los e-NCF tienen 13 caracteres de longitud fija (serie + secuencia), de modo que
+        // la comparación lexicográfica de la cadena completa equivale al orden numérico dentro de
+        // la serie y además excluye de un rango E32 las series E31/E34/etc. Devuelve entidades
+        // trackeadas: el patrón del repositorio es consultar, mutar y persistir con UpdateAsync.
+        return await _context.ElectronicInvoices
+            .Where(i => i.eNCF.CompareTo(eNCFDesde) >= 0 && i.eNCF.CompareTo(eNCFHasta) <= 0)
+            .OrderBy(i => i.eNCF)
+            .ToListAsync(ct);
+    }
+
     public async Task<IEnumerable<ElectronicInvoice>> GetByRNCAsync(string rnc, TipoeCFType? tipo = null, CancellationToken ct = default)
     {
         var query = _context.ElectronicInvoices.Where(i => i.RNCEmisor == rnc);

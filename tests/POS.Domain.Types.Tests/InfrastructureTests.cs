@@ -99,10 +99,14 @@ public class InfrastructureTests
 
         var xml = _serializer.SerializeAnulacion(request);
 
+        // Estructura oficial del XSD ANECF: Encabezado + DetalleAnulacion + ranura de firma.
         Assert.Contains("<ANECF>", xml);
-        Assert.Contains("<RNCEmisor>13100000001</RNCEmisor>", xml);
+        Assert.Contains("<RncEmisor>13100000001</RncEmisor>", xml);
+        Assert.Contains("<CantidadeNCFAnulados>5</CantidadeNCFAnulados>", xml);
         Assert.Contains("<TipoeCF>32</TipoeCF>", xml);
-        Assert.Contains("<CantidadSecuencias>5</CantidadSecuencias>", xml);
+        Assert.Contains("<SecuenciaeNCFDesde>E320000000001</SecuenciaeNCFDesde>", xml);
+        Assert.Contains("<SecuenciaeNCFHasta>E320000000005</SecuenciaeNCFHasta>", xml);
+        Assert.Contains("<Signature", xml);
     }
 
     [Fact]

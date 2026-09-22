@@ -142,11 +142,11 @@ public class PosWorkflowTests
         // Assert
         Assert.True(valResult.EsValido);
         Assert.Contains("<ANECF>", xml);
-        Assert.Contains("<RNCEmisor>13100000001</RNCEmisor>", xml);
-        Assert.Contains("<eNCFDesde>E320000000001</eNCFDesde>", xml);
-        Assert.Contains("<eNCFHasta>E320000000001</eNCFHasta>", xml);
-        Assert.Contains("<CantidadSecuencias>1</CantidadSecuencias>", xml);
-        Assert.Contains("<CodigoMotivoAnulacion>5</CodigoMotivoAnulacion>", xml);
+        Assert.Contains("<RncEmisor>13100000001</RncEmisor>", xml);
+        Assert.Contains("<SecuenciaeNCFDesde>E320000000001</SecuenciaeNCFDesde>", xml);
+        Assert.Contains("<SecuenciaeNCFHasta>E320000000001</SecuenciaeNCFHasta>", xml);
+        Assert.Contains("<CantidadeNCFAnulados>1</CantidadeNCFAnulados>", xml);
+        Assert.Contains("<TipoeCF>32</TipoeCF>", xml);
     }
 
     [Fact]
