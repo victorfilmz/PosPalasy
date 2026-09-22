@@ -23,6 +23,7 @@ public class InvoiceRepository : IInvoiceRepository
     {
         return await _context.ElectronicInvoices
             .Include(i => i.Items)
+            .Include(i => i.Devolucion)
             .FirstOrDefaultAsync(i => i.Id == id, ct);
     }
 

@@ -72,13 +72,22 @@ public class VentaDevolucionNotaCreditoEndToEndTests : IClassFixture<PosAppFacto
         var detalle = await sesion.Cliente.GetStringAsync($"/Facturacion/Detalle/{notaId}");
         var detalleTexto = System.Net.WebUtility.HtmlDecode(detalle);
         Assert.Contains("e-CF 34 Nota de Crédito", detalleTexto);
-        Assert.Contains(ventaOriginal.eNCF, detalleTexto);            // referencia al comprobante corregido
-        Assert.Contains("corrección de montos", detalleTexto);        // código de modificación 3
+
+        // Panel destacado del comprobante original: número, tipo, fecha, total, estado y enlace.
+        Assert.Contains("corrige al comprobante", detalleTexto);
+        Assert.Contains("Ver comprobante original", detalleTexto);
+        Assert.Contains(ventaOriginal.eNCF, detalleTexto);            // número del original
+        Assert.Contains("e-CF 32 Consumo", detalleTexto);             // tipo del original
+        Assert.Contains($"Emitido: {ventaOriginal.FechaEmision}", detalleTexto);
+        Assert.Matches(@"118,00|118\.00", detalleTexto);              // total del original (RD$ 118)
+        Assert.Contains("Corrección de montos", detalleTexto);        // código de modificación 3
+        Assert.Contains($"/Facturacion/Detalle/{ventaOriginal.Id}", detalle); // enlace al original
 
         // ---------------------------------------------------------------- la pantalla de devolución saldada
         pantallaDevolucion = await sesion.Cliente.GetStringAsync($"/Caja/Devolucion?ventaId={venta.Id}");
         Assert.Contains("NC E34", pantallaDevolucion);
         Assert.DoesNotContain("Emitir nota de crédito", pantallaDevolucion);
+        Assert.Contains("Emitida — en cola de transmisión", pantallaDevolucion); // la devolución muestra su nota
 
         // ---------------------------------------------------------------- integridad fiscal en la BD
         await using var contexto = CrearContexto();
@@ -175,6 +184,69 @@ public class VentaDevolucionNotaCreditoEndToEndTests : IClassFixture<PosAppFacto
         await using var contexto = CrearContexto();
         Assert.Equal(0, await contexto.ElectronicInvoices.AsNoTracking()
             .CountAsync(i => i.DevolucionId == devolucionId));
+    }
+
+    [Fact]
+    public async Task FlujoCompletoPorUI_OriginalNoRegistradoEnElSistema_MuestraReferenciaYEnlaceALaDevolucion()
+    {
+        var productoId = await SembrarProductoAsync(precio: 100m, stock: 5m);
+        var sesion = await CrearSesionSupervisorConTurnoAsync();
+
+        var venta = await VenderAsync(sesion, productoId);
+        var original = await ComprobanteDeVentaAsync(venta.Id);
+        var eNCFOriginal = original.eNCF;
+
+        var alta = await PostFormularioAsync(sesion, "/Caja/Devolucion", new Dictionary<string, string>
+        {
+            ["VentaId"] = venta.Id.ToString(),
+            ["Motivo"] = "Devolución cuyo original se elimina (E2E)"
+        });
+        Assert.Equal(HttpStatusCode.Redirect, alta.StatusCode);
+        var devolucionId = await DevolucionIdDeVentaAsync(venta.Id);
+
+        var emision = await PostFormularioAsync(
+            sesion, $"/Facturacion/EmitirNotaCredito?devolucionId={devolucionId}", new Dictionary<string, string>());
+        Assert.Equal(HttpStatusCode.Redirect, emision.StatusCode);
+        var rutaDetalle = emision.Headers.Location!.ToString();
+        var notaId = int.Parse(rutaDetalle[(rutaDetalle.LastIndexOf('/') + 1)..]);
+
+        // Simula una nota cuyo comprobante original no está en la base (p. ej. emitido antes del
+        // sistema actual): la vista debe degradarse con elegancia, sin perder la referencia fiscal.
+        await using (var contexto = CrearContexto())
+        {
+            var comprobanteOriginal = await contexto.ElectronicInvoices.SingleAsync(i => i.Id == original.Id);
+            contexto.ElectronicInvoices.Remove(comprobanteOriginal);
+            await contexto.SaveChangesAsync();
+        }
+
+        var detalle = System.Net.WebUtility.HtmlDecode(
+            await sesion.Cliente.GetStringAsync($"/Facturacion/Detalle/{notaId}"));
+
+        // La referencia al original persiste (dato fiscal) y la vista lo declara explícitamente.
+        Assert.Contains("corrige al comprobante", detalle);
+        Assert.Contains(eNCFOriginal, detalle);
+        Assert.Contains("No registrado en este sistema", detalle);
+
+        // Navegación alternativa: la devolución que originó la nota sí es alcanzable.
+        Assert.Contains($"/Caja/Devolucion?ventaId={venta.Id}", detalle);
+        Assert.Contains("Ver devolución asociada", detalle);
+    }
+
+    [Fact]
+    public async Task FlujoCompletoPorUI_DetalleDeComprobanteSinCorreccion_NoMuestraPanelDeReferencia()
+    {
+        var productoId = await SembrarProductoAsync(precio: 100m, stock: 5m);
+        var sesion = await CrearSesionSupervisorConTurnoAsync();
+
+        var venta = await VenderAsync(sesion, productoId);
+        var comprobante = await ComprobanteDeVentaAsync(venta.Id);
+
+        var detalle = System.Net.WebUtility.HtmlDecode(
+            await sesion.Cliente.GetStringAsync($"/Facturacion/Detalle/{comprobante.Id}"));
+
+        // Un e-CF 32 normal no es una corrección: el panel de nota de crédito no debe aparecer.
+        Assert.Contains("e-CF 32 Consumo", detalle);
+        Assert.DoesNotContain("corrige al comprobante", detalle);
     }
 
     // ------------------------------------------------------------------ soporte

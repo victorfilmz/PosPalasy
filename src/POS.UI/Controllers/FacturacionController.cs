@@ -72,6 +72,12 @@ public class FacturacionController : Controller
         if (invoice == null)
             return NotFound();
 
+        // Las notas de crédito 34 muestran de forma destacada el comprobante que corrigen:
+        // su estado fiscal vigente, montos y acceso directo a su detalle.
+        ViewBag.ComprobanteOriginal = !string.IsNullOrWhiteSpace(invoice.eNCFModificado)
+            ? await _invoiceRepo.GetByENCFAsync(invoice.eNCFModificado)
+            : null;
+
         return View(invoice);
     }
 

@@ -1,9 +1,10 @@
 @model POS.Domain.Entities.ElectronicInvoice
 @using POS.Domain.Enums
 @using POS.Domain.Types
-
+@using POS.Domain.Entities
 @{
     ViewData["Title"] = "Detalle Factura " + Model.eNCF;
+    var comprobanteOriginal = ViewBag.ComprobanteOriginal as ElectronicInvoice;
 }
 
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
@@ -57,32 +58,139 @@
 
 @if (Model.TipoeCF == TipoeCFType.NotaCredito && !string.IsNullOrEmpty(Model.eNCFModificado))
 {
-    <div class="card border-0 shadow-sm rounded-4 mb-4 bg-warning-subtle">
-        <div class="card-body px-4 py-3">
-            <div class="d-flex flex-wrap align-items-center gap-2">
-                <h6 class="fw-bold mb-0 text-dark">
-                    <i class="bi bi-arrow-return-left me-2"></i>Nota de crédito — corrige al comprobante
-                </h6>
-                <span class="badge bg-dark font-tabular">@Model.eNCFModificado</span>
-                @if (!string.IsNullOrEmpty(Model.FechaNCFModificado))
-                {
-                    <span class="text-muted small">fecha del comprobante modificado: @Model.FechaNCFModificado</span>
-                }
-                @if (Model.CodigoModificacion.HasValue)
-                {
-                    var motivo = Model.CodigoModificacion.Value switch
+    var motivo = Model.CodigoModificacion switch
+    {
+        1 => "Anulación",
+        2 => "Corrección de texto",
+        3 => "Corrección de montos",
+        4 => "Sustitución",
+        _ => string.Empty
+    };
+
+    <div class="card border-0 shadow-sm rounded-4 mb-4 overflow-hidden border-start border-warning border-4">
+        <div class="card-header bg-warning-subtle py-3 px-4 border-bottom d-flex flex-wrap justify-content-between align-items-center gap-2">
+            <h6 class="fw-bold mb-0 text-dark">
+                <i class="bi bi-arrow-return-left me-2"></i>Nota de crédito — corrige al comprobante
+            </h6>
+            @if (Model.CodigoModificacion.HasValue)
+            {
+                <span class="badge bg-warning text-dark fs-6 px-3 py-2">
+                    Código de modificación: @Model.CodigoModificacion@(!string.IsNullOrEmpty(motivo) ? $" — {motivo}" : string.Empty)
+                </span>
+            }
+        </div>
+        <div class="card-body bg-warning-subtle bg-opacity-25 px-4 py-4">
+            @if (comprobanteOriginal != null)
+            {
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                             style="width: 52px; height: 52px; background-color: #fef3c7;">
+                            <i class="bi bi-receipt fs-4 text-warning-emphasis"></i>
+                        </div>
+                        <div>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="fs-4 fw-bold text-dark font-tabular">@comprobanteOriginal.eNCF</span>
+                                <span class="badge bg-dark font-tabular">
+                                    @(comprobanteOriginal.TipoeCF switch
+                                    {
+                                        TipoeCFType.FacturaCreditoFiscal => "e-CF 31 Crédito Fiscal",
+                                        TipoeCFType.FacturaConsumo => "e-CF 32 Consumo",
+                                        TipoeCFType.NotaDebito => "e-CF 33 Nota de Débito",
+                                        TipoeCFType.NotaCredito => "e-CF 34 Nota de Crédito",
+                                        _ => comprobanteOriginal.TipoeCF.ToString()
+                                    })
+                                </span>
+                            </div>
+                            <small class="text-muted font-tabular d-block">
+                                Emitido: @comprobanteOriginal.FechaEmision
+                                @if (!string.IsNullOrEmpty(comprobanteOriginal.RNCComprador))
+                                {
+                                    @(" • ")@comprobanteOriginal.RNCComprador
+                                    @if (!string.IsNullOrEmpty(comprobanteOriginal.RazonSocialComprador))
+                                    {
+                                        @(" — ")@comprobanteOriginal.RazonSocialComprador
+                                    }
+                                }
+                            </small>
+                        </div>
+                    </div>
+                    <div class="d-flex flex-wrap align-items-center gap-3">
+                        <div class="text-end">
+                            <span class="text-muted small d-block fw-bold text-uppercase">Total del comprobante corregido</span>
+                            <span class="fs-4 fw-bold text-dark font-tabular">RD$ @comprobanteOriginal.MontoTotal.ToString("N2")</span>
+                        </div>
+                        <div class="vr align-self-stretch d-none d-sm-block"></div>
+                        <div class="text-end">
+                            <span class="text-muted small d-block fw-bold text-uppercase">Estado fiscal</span>
+                            @switch (comprobanteOriginal.Estado)
+                            {
+                                case EstadoFacturaElectronica.Aceptado:
+                                    <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2">
+                                        <i class="bi bi-check2-circle me-1"></i>Aceptado DGII
+                                    </span>
+                                    break;
+                                case EstadoFacturaElectronica.EnProceso:
+                                    <span class="badge bg-warning-subtle text-dark border border-warning-subtle px-3 py-2">
+                                        <i class="bi bi-hourglass-split me-1"></i>En Proceso
+                                    </span>
+                                    break;
+                                case EstadoFacturaElectronica.Rechazado:
+                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle px-3 py-2">
+                                        <i class="bi bi-x-circle me-1"></i>Rechazado
+                                    </span>
+                                    break;
+                                case EstadoFacturaElectronica.Anulado:
+                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-3 py-2">
+                                        <i class="bi bi-slash-circle me-1"></i>Anulado
+                                    </span>
+                                    break;
+                                case EstadoFacturaElectronica.PendienteReenvio:
+                                    <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-3 py-2">
+                                        <i class="bi bi-cloud-slash me-1"></i>Contingencia Local
+                                    </span>
+                                    break;
+                                default:
+                                    <span class="badge bg-light text-dark border px-3 py-2">@(comprobanteOriginal.Estado == EstadoFacturaElectronica.NoEnviado ? "Sin transmitir" : comprobanteOriginal.Estado.ToString())</span>
+                                    break;
+                            }
+                        </div>
+                        <a asp-action="Detalle" asp-route-id="@comprobanteOriginal.Id"
+                           class="btn btn-warning fw-semibold d-flex align-items-center gap-2 shadow-sm">
+                            <i class="bi bi-box-arrow-up-right"></i>Ver comprobante original
+                        </a>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-3">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                             style="width: 52px; height: 52px; background-color: #fef3c7;">
+                            <i class="bi bi-receipt fs-4 text-warning-emphasis"></i>
+                        </div>
+                        <div>
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="fs-4 fw-bold text-dark font-tabular">@Model.eNCFModificado</span>
+                                <span class="badge bg-secondary-subtle text-secondary border">Comprobante modificado</span>
+                            </div>
+                            <small class="text-muted d-block">No registrado en este sistema (posiblemente emitido antes del sistema actual).</small>
+                            @if (!string.IsNullOrEmpty(Model.FechaNCFModificado))
+                            { 
+                                <small class="text-muted font-tabular d-block">Fecha del comprobante modificado: @Model.FechaNCFModificado</small>
+                            }
+            			</div>
+                    </div>
+                    @if (Model.DevolucionId.HasValue)
                     {
-                        1 => "anulación",
-                        2 => "corrección de texto",
-                        3 => "corrección de montos",
-                        4 => "sustitución",
-                        _ => string.Empty
-                    };
-                    <span class="badge bg-secondary">
-                        Código de modificación: @Model.CodigoModificacion@(!string.IsNullOrEmpty(motivo) ? $" ({motivo})" : string.Empty)
-                    </span>
-                }
-            </div>
+                        <a asp-controller="Caja" asp-action="Devolucion" asp-route-ventaId="@Model.Devolucion?.VentaId"
+                           class="btn btn-outline-dark fw-semibold d-flex align-items-center gap-2">
+                            <i class="bi bi-arrow-left-right me-1"></i>Ver devolución asociada
+                        </a>
+                    }
+                </div>
+            }
         </div>
     </div>
 }
