@@ -25,13 +25,18 @@ Los pasos 1 y 2 son paralelizables; el 3 depende de ambos; el 4 es el plan ya es
 autorizada en RD, a nombre del contribuyente emisor. PosPalasy lo exige para firmar XML-DSig
 (`FirmadorComprobanteECF`) y autenticar la semilla (`DgiiAuthenticator`).
 
-**Entidades emisoras autorizadas (verificar vigencia al momento del trámite):**
+**Perfil correcto (verificado 23-09-2026):** la DGII solo acepta para e-CF el certificado de
+**persona física, perfil Procesos/Tareas Tributarios**, a nombre de la persona autorizada a
+firmar bajo el RNC — no un certificado de persona jurídica.
 
-| Entidad | Nota |
-|---|---|
-| Avansi (avansi.com.do) | Histórica del programa e-CF |
-| Cámara de Comercio y Producción de Santo Domingo | Emisión presencial y en línea |
-| PUCMM / Digicel (verificar) | Confirmar listado vigente en dgii.gov.do |
+**Entidades emisoras autorizadas (precios verificados en sus portales):**
+
+| Entidad | Producto | Precio verificado | Portal |
+|---|---|---|---|
+| Avansi (Viafirma) | Certificado PT de persona física | RD$2,360 (1 año, imp. incl.) | viafirma.do → Certificados → Procesos Tributarios |
+| Cámara de Comercio y Producción de Santo Domingo | Certificado de Facturación Electrónica (Digifirma) | USD$29.95 (1 año) / USD$45.00 (2 años) | digi.camarasantodomingo.do |
+
+> Confirmar la lista vigente de entidades acreditadas en INDOTEL al momento del trámite.
 
 **Requisitos típicos (confirmar con la entidad):**
 
@@ -39,7 +44,9 @@ autorizada en RD, a nombre del contribuyente emisor. PosPalasy lo exige para fir
 - Registro Mercantil vigente (persona jurídica).
 - Cédula o pasaporte del representante legal **tal como consta en la DGII**.
 - Formulario de solicitud de la entidad (en línea o presencial).
-- Costo aproximado: RD$1,000–2,500 por 1–2 años de vigencia (varía por entidad).
+
+**Paquete de solicitud completo (checklist de documentos, formulario precargado y plan de
+ejecución): ver doc 19.**
 
 **Especificaciones técnicas obligatorias:**
 
@@ -49,6 +56,8 @@ autorizada en RD, a nombre del contribuyente emisor. PosPalasy lo exige para fir
 - El **CN/RNC del certificado debe corresponder al RNC emisor** configurado en
   `Enterprise:RNC` (la DGII rechaza la semilla firmada con certificado de otro RNC).
 - Vigencia mínima recomendada: 1 año (la pantalla de Configuración avisa 30 días antes de expirar).
+  La DGII rechaza e-CF firmados con certificado vencido **el mismo día del vencimiento y sin
+  período de gracia** — iniciar la renovación con 30 días de anticipación.
 
 **Al recibirlo:**
 
