@@ -18,6 +18,7 @@
 > 📁 [15_Plan_Fase6.md](15_Plan_Fase6.md) — **Plan FASE 6: reporte 606, contingencia y portal de consultas (sub-fases 6.0–6.4)**
 > 📁 [16_Runbook_Produccion.md](16_Runbook_Produccion.md) — **Runbook de producción: checklist de arranque, monitoreo /health, backups y operación diaria**
 > 📁 [17_Gate_Final_Fase6.md](17_Gate_Final_Fase6.md) — **Gate final de FASE 6: informe, evidencia 313/313 y veredicto PASS**
+> 📁 [18_Solicitud_DGII_Habilitacion.md](18_Solicitud_DGII_Habilitacion.md) — **Carta formal a la DGII: habilitación como emisor electrónico y acceso TestECF (plantilla lista para completar)**
 > 📁 [README.md](README.md) — Documentación principal y guía de inicio
 >
 > ---
