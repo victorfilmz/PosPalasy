@@ -34,6 +34,12 @@ public class DgiiQueueBackgroundService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<DgiiQueueBackgroundService> _logger;
 
+    /// <summary>
+    /// Último ciclo completado (UTC). Lo consulta el health check: si el worker lleva más de
+    /// 3 intervalos sin completar un ciclo, el sistema está degradado aunque responda HTTP.
+    /// </summary>
+    public DateTimeOffset? UltimoCicloCompletadoUtc { get; private set; }
+
     public DgiiQueueBackgroundService(
         IServiceScopeFactory scopeFactory,
         ILogger<DgiiQueueBackgroundService> logger)
@@ -53,6 +59,7 @@ public class DgiiQueueBackgroundService : BackgroundService
             try
             {
                 await ProcesarColaAsync(stoppingToken);
+                UltimoCicloCompletadoUtc = DateTimeOffset.UtcNow;
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -76,11 +83,39 @@ public class DgiiQueueBackgroundService : BackgroundService
         _logger.LogInformation("DgiiQueueBackgroundService detenido.");
     }
 
+    /// <summary>
+    /// Alerta de agotamiento de secuencias (producción): si una serie consumió el 90% de su rango
+    /// autorizado, avisa ANTES de que la venta falle en pleno pico con SECUENCIA_AGOTADA. Aviso
+    /// como Warning en cada ciclo (el worker corre cada 15 s; el log diario rota solo).
+    /// </summary>
+    private async Task RevisarAgotamientoSecuenciasAsync(IServiceScope scope, CancellationToken ct)
+    {
+        var secuenciaRepo = scope.ServiceProvider.GetRequiredService<ISecuenciaECFRepository>();
+        foreach (var serie in await secuenciaRepo.ObtenerTodasAsync(ct))
+        {
+            if (!serie.HastaAutorizado.HasValue) continue;
+            var desde = serie.DesdeAutorizado ?? 1;
+            var rango = serie.HastaAutorizado.Value - desde + 1;
+            if (rango <= 0) continue;
+
+            var restantes = serie.HastaAutorizado.Value - serie.Ultimo;
+            if (restantes <= rango * 0.1)
+            {
+                _logger.LogWarning(
+                    "SECUENCIAS POR AGOTAR: la serie {Serie} (tipo {Tipo}) tiene {Restantes} de {Rango} números disponibles " +
+                    "({Porcentaje:P0} restante). Solicite nuevas secuencias a la DGII antes de facturar con error SECUENCIA_AGOTADA.",
+                    serie.Serie, serie.TipoECF, restantes, rango, (double)restantes / rango);
+            }
+        }
+    }
+
     private async Task ProcesarColaAsync(CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var queueRepo = scope.ServiceProvider.GetRequiredService<IEmisionDGIIQueueRepository>();
         var invoiceService = scope.ServiceProvider.GetRequiredService<IElectronicInvoiceService>();
+
+        await RevisarAgotamientoSecuenciasAsync(scope, ct);
 
         var ahora = DateTime.UtcNow;
         var pendientes = await queueRepo.ObtenerElegiblesAsync(MaximoPorPasada, ahora, ct);

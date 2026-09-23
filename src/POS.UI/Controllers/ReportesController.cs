@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using POS.Application.Interfaces;
+using POS.Application.Services;
 using POS.Domain.Entities;
 using POS.Domain.Repositories;
 using POS.UI.Security;
@@ -45,8 +46,11 @@ public class ReportesController : Controller
         var enterprise = await _enterpriseRepo.GetDefaultAsync();
         var facturas = await _invoiceRepo.GetByRNCAsync(enterprise?.RNC ?? "13100000001");
 
-        // Filtrar por período si la fecha coincide, o mostrar las facturas del período
-        var registros = _reporteService.GenerarRegistros607(facturas);
+        // Filtro por período fiscal (corrección de cumplimiento): el 607 declara un mes/año y
+        // solo puede llevar los comprobantes emitidos en ese período.
+        var (pAnio, pMes, _, _) = Periodo(anio, mes);
+        var registros = _reporteService.GenerarRegistros607(
+            ReporteFiscalService.FiltrarPorPeriodo(facturas, pAnio, pMes));
 
         ViewBag.Anio = targetAnio;
         ViewBag.Mes = targetMes;
@@ -58,12 +62,14 @@ public class ReportesController : Controller
     [HttpGet]
     public async Task<IActionResult> Exportar607Txt(int anio, int mes)
     {
+        var (targetAnio, targetMes, _, _) = Periodo(anio, mes);
         var enterprise = await _enterpriseRepo.GetDefaultAsync();
         var rnc = enterprise?.RNC ?? "13100000001";
         var facturas = await _invoiceRepo.GetByRNCAsync(rnc);
 
-        var registros = _reporteService.GenerarRegistros607(facturas);
-        var txt = _reporteService.GenerarArchivo607Txt(rnc, anio, mes, registros);
+        var registros = _reporteService.GenerarRegistros607(
+            ReporteFiscalService.FiltrarPorPeriodo(facturas, targetAnio, targetMes));
+        var txt = _reporteService.GenerarArchivo607Txt(rnc, targetAnio, targetMes, registros);
 
         var fileName = $"DGII_F_607_{rnc}_{anio:D4}{mes:D2}.txt";
         var bytes = Encoding.UTF8.GetBytes(txt);
@@ -125,13 +131,12 @@ public class ReportesController : Controller
     [HttpGet]
     public async Task<IActionResult> ResumenItbis(int? anio, int? mes)
     {
-        var targetAnio = anio ?? DateTime.UtcNow.Year;
-        var targetMes = mes ?? DateTime.UtcNow.Month;
-
+        var (targetAnio, targetMes, _, _) = Periodo(anio, mes);
         var enterprise = await _enterpriseRepo.GetDefaultAsync();
         var facturas = await _invoiceRepo.GetByRNCAsync(enterprise?.RNC ?? "13100000001");
 
-        var resumen = _reporteService.GenerarResumenItbis(targetAnio, targetMes, facturas);
+        var resumen = _reporteService.GenerarResumenItbis(targetAnio, targetMes,
+            ReporteFiscalService.FiltrarPorPeriodo(facturas, targetAnio, targetMes));
         ViewBag.Enterprise = enterprise;
 
         return View(resumen);

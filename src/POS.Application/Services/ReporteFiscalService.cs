@@ -11,6 +11,18 @@ namespace POS.Application.Services;
 
 public class ReporteFiscalService : IReporteFiscalService
 {
+    /// <summary>
+    /// Filtra comprobantes por período fiscal (mes/año) a partir de la FechaEmision DD-MM-AAAA.
+    /// Sin este filtro, el TXT oficial declararía un período y llevaría comprobantes de otros
+    /// meses (bug de cumplimiento). Anula la ambigüedad de fechas inválidas excluyéndolas.
+    /// </summary>
+    public static IEnumerable<ElectronicInvoice> FiltrarPorPeriodo(
+        IEnumerable<ElectronicInvoice> facturas, int anio, int mes) =>
+        facturas.Where(f =>
+            f.FechaEmision?.Length == 10 &&
+            f.FechaEmision[6..10] == anio.ToString("D4") &&
+            f.FechaEmision[3..5] == mes.ToString("D2"));
+
     public List<Registro607Dto> GenerarRegistros607(IEnumerable<ElectronicInvoice> facturas)
     {
         var lista = new List<Registro607Dto>();

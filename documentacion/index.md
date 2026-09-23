@@ -16,6 +16,7 @@
 > 📁 [13_Gate_Final_Fase5.md](13_Gate_Final_Fase5.md) — **Gate final de FASE 5: informe, evidencia y veredicto PASS**
 > 📁 [14_Tramite_Certificado_A1.md](14_Tramite_Certificado_A1.md) — **Trámite operativo: certificado A1 y habilitación como emisor electrónico (testecf)**
 > 📁 [15_Plan_Fase6.md](15_Plan_Fase6.md) — **Plan FASE 6: reporte 606, contingencia y portal de consultas (sub-fases 6.0–6.4)**
+> 📁 [16_Runbook_Produccion.md](16_Runbook_Produccion.md) — **Runbook de producción: checklist de arranque, monitoreo /health, backups y operación diaria**
 > 📁 [README.md](README.md) — Documentación principal y guía de inicio
 >
 > ---

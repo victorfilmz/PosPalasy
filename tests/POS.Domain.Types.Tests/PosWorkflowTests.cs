@@ -333,4 +333,45 @@ public class PosWorkflowTests
 
         Assert.Equal("606|13100000001|202608|0\r\n", txt);
     }
+
+    [Fact]
+    public void FiltrarPorPeriodo_ExcluyeComprobantesDeOtrosMeses()
+    {
+        // Bug de cumplimiento: el TXT 607 declara un período y no puede llevar comprobantes
+        // de otros meses aunque el repositorio los devuelva.
+        var delPeriodo = new ElectronicInvoice
+        {
+            eNCF = "E320000000010",
+            FechaEmision = "15-09-2026",
+            Estado = EstadoFacturaElectronica.Aceptado,
+            MontoTotal = 118.00m
+        };
+        var deOtroMes = new ElectronicInvoice
+        {
+            eNCF = "E320000000011",
+            FechaEmision = "20-08-2026",
+            Estado = EstadoFacturaElectronica.Aceptado,
+            MontoTotal = 100.00m
+        };
+        var deOtroAnio = new ElectronicInvoice
+        {
+            eNCF = "E320000000012",
+            FechaEmision = "05-09-2025",
+            Estado = EstadoFacturaElectronica.Aceptado,
+            MontoTotal = 50.00m
+        };
+        var fechaInvalida = new ElectronicInvoice
+        {
+            eNCF = "E320000000013",
+            FechaEmision = "sin-fecha",
+            Estado = EstadoFacturaElectronica.Aceptado,
+            MontoTotal = 10.00m
+        };
+
+        var filtradas = ReporteFiscalService.FiltrarPorPeriodo(
+            new[] { delPeriodo, deOtroMes, deOtroAnio, fechaInvalida }, 2026, 9).ToList();
+
+        var unica = Assert.Single(filtradas);
+        Assert.Equal("E320000000010", unica.eNCF);
+    }
 }

@@ -29,6 +29,9 @@ public interface ISecuenciaECFRepository
     /// <summary>Estado actual de una serie (para configuración y diagnóstico).</summary>
     Task<SecuenciaECF?> ObtenerAsync(string serie, CancellationToken ct = default);
 
+    /// <summary>Todas las series registradas (para la alerta de agotamiento del worker).</summary>
+    Task<IEnumerable<SecuenciaECF>> ObtenerTodasAsync(CancellationToken ct = default);
+
     /// <summary>Asegura que la serie existe con el rango autorizado indicado.</summary>
     Task<SecuenciaECF> AsegurarSerieAsync(
         TipoeCFType tipo,

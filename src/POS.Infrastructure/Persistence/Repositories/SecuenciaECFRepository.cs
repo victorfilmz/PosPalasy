@@ -117,6 +117,13 @@ public sealed class SecuenciaECFRepository : ISecuenciaECFRepository
             .FirstOrDefaultAsync(s => s.Serie == serie, ct);
     }
 
+    public async Task<IEnumerable<SecuenciaECF>> ObtenerTodasAsync(CancellationToken ct = default)
+    {
+        return await _context.SecuenciasECF
+            .AsNoTracking()
+            .ToListAsync(ct);
+    }
+
     public async Task<SecuenciaECF> AsegurarSerieAsync(
         TipoeCFType tipo,
         long desde = 1,

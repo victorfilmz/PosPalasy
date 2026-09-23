@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Mvc.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using POS.Application.CasosDeUso.Ventas;
@@ -27,6 +28,7 @@ using POS.Infrastructure.Security;
 using POS.Infrastructure.Services;
 using POS.Infrastructure.XmlSerialization;
 using POS.UI.Security;
+using POS.UI.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -133,6 +135,13 @@ builder.Services.AddHttpClient<IDgiiApiClient, DgiiApiClient>()
             ? sp.GetRequiredService<GrabadorTransmisionesDGII>()
             : null));
 
+// Health checks de producción: BD (el recurso crítico), certificado (sin él no se firma) y
+// worker de cola (sin él los comprobantes no salen). El mapa /health responde 503 si alguno falla.
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<POSDbContext>("base-de-datos")
+    .AddCheck<CertificadoDigitalHealthCheck>("certificado-digital", HealthStatus.Degraded)
+    .AddCheck<WorkerColaDgiiHealthCheck>("worker-cola-dgii", HealthStatus.Degraded);
+
 // Repositorios
 builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
 builder.Services.AddScoped<IVentaRepository, VentaRepository>();
@@ -164,6 +173,11 @@ builder.Services.AddScoped<EmitirNotaCreditoDevolucionHandler>();
 builder.Services.AddSingleton<ISecurityCodeGenerator, POS.Infrastructure.Services.GeneradorCodigoSeguridad>();
 builder.Services.AddSingleton<IProveedorCertificadoDigital, ProveedorCertificadoDigital>();
 builder.Services.AddSingleton<IFirmadorComprobanteECF, FirmadorComprobanteECF>();
+
+// Health checks concretos (usados por el mapa /health)
+builder.Services.AddSingleton<CertificadoDigitalHealthCheck>();
+builder.Services.AddSingleton<WorkerColaDgiiHealthCheck>();
+builder.Services.AddSingleton<POS.UI.Services.DgiiQueueBackgroundService>();
 builder.Services.AddScoped<IElectronicInvoiceService>(sp => new DgiiElectronicInvoiceService(
     sp.GetRequiredService<IXmlSerializer>(),
     sp.GetRequiredService<IXmlValidator>(),
@@ -180,8 +194,9 @@ builder.Services.AddScoped<IElectronicInvoiceService>(sp => new DgiiElectronicIn
     secuenciasLibresRepository: sp.GetRequiredService<ISecuenciaLibreRepository>(),
     auditoriaRepository: sp.GetRequiredService<IAuditoriaRepository>()));
 
-// Servicio en segundo plano para resiliencia y cola offline DGII
-builder.Services.AddHostedService<POS.UI.Services.DgiiQueueBackgroundService>();
+// Servicio en segundo plano para resiliencia y cola offline DGII (misma instancia que consulta
+// su health check: es singleton, el AddHostedService reutiliza el registro anterior).
+builder.Services.AddHostedService(sp => sp.GetRequiredService<POS.UI.Services.DgiiQueueBackgroundService>());
 
 // Guarda de entorno: el simulador DGII no puede estar activo fuera de desarrollo.
 // Un simulador activo en producción reporta comprobantes "enviados" que nunca salieron del sistema.
@@ -190,6 +205,18 @@ if (dgiiConfig.ModoSimulador && !builder.Environment.IsDevelopment())
     throw new InvalidOperationException(
         "DGII:ModoSimulador está activo en un entorno que no es Development (" +
         $"{builder.Environment.EnvironmentName}). Configure DGII:ModoSimulador=false antes de operar con la DGII.");
+}
+
+// Logging persistente a archivo (producción): un incidente debe dejar evidencia aunque nadie
+// esté mirando la consola. %LOCALAPPDATA%\PosPalasy\logs\pospalasy-AAAAMMDD.log con rotación
+// diaria y sin dependencias externas. Se registra ANTES de Build() porque la colección de
+// servicios queda read-only después. En Development la consola es la fuente principal.
+if (!builder.Environment.IsDevelopment())
+{
+    var directorioLogs = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PosPalasy", "logs");
+    Directory.CreateDirectory(directorioLogs);
+    builder.Logging.AddProvider(new ArchivoLoggerProvider(directorioLogs));
 }
 
 var app = builder.Build();
@@ -203,6 +230,11 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseRouting();
+
+// Health check de producción (sin exponer detalle interno): solo dice si el sistema está vivo.
+// La autenticación NO aplica a este endpoint (queda antes de UseAuthentication) porque un
+// monitor externo no tiene sesión; no expone datos — únicamente 200 Healthy / 503 Unhealthy.
+app.MapHealthChecks("/health");
 
 app.UseAuthentication();
 
@@ -242,6 +274,74 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.Run();
+
+/// <summary>
+/// Logger de archivo mínimo con rotación diaria (pospalasy-AAAAMMDD.log): una sola cola de
+/// escritura con append atómico por línea. Suficiente para evidencia de incidentes; el volumen
+/// alto lo limita el nivel de appsettings (EF en Warning). Sin paquetes externos.
+/// </summary>
+public sealed class ArchivoLoggerProvider : ILoggerProvider
+{
+    private readonly string _directorio;
+    private readonly object _cerrojo = new();
+    private StreamWriter? _escritor;
+    private DateTime _fechaActual;
+
+    public ArchivoLoggerProvider(string directorio) => _directorio = directorio;
+
+    public ILogger CreateLogger(string categoryName) => new ArchivoLogger(this, categoryName);
+
+    private void Escribir(DateTime utcAhora, string linea)
+    {
+        lock (_cerrojo)
+        {
+            try
+            {
+                if (_escritor is null || _fechaActual != utcAhora.Date)
+                {
+                    _escritor?.Dispose();
+                    _fechaActual = utcAhora.Date;
+                    _escritor = new StreamWriter(
+                        Path.Combine(_directorio, $"pospalasy-{utcAhora:yyyyMMdd}.log"), append: true);
+                }
+                _escritor.WriteLine(linea);
+                _escritor.Flush();
+            }
+            catch (IOException)
+            {
+                // El log no puede tumbar la aplicación: si el disco falla, se pierde la línea y sigue.
+            }
+        }
+    }
+
+    public void Dispose() => _escritor?.Dispose();
+
+    private sealed class ArchivoLogger : ILogger
+    {
+        private readonly ArchivoLoggerProvider _proveedor;
+        private readonly string _categoria;
+
+        public ArchivoLogger(ArchivoLoggerProvider proveedor, string categoria)
+        {
+            _proveedor = proveedor;
+            _categoria = categoria;
+        }
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Information;
+
+        public void Log<TState>(
+            LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (!IsEnabled(logLevel)) return;
+            var utcAhora = DateTime.UtcNow;
+            _proveedor.Escribir(utcAhora,
+                $"{utcAhora:yyyy-MM-dd HH:mm:ss.fff} [{logLevel}] {_categoria}: {formatter(state, exception)}" +
+                (exception is null ? "" : $"\n{exception}"));
+        }
+    }
+}
 
 /// <summary>
 /// Punto de entrada expuesto para las pruebas de integración HTTP (WebApplicationFactory).
