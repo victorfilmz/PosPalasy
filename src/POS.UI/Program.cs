@@ -99,6 +99,10 @@ builder.Services.AddAuthorization(Politicas.AgregarPoliticas);
 
 // Seguridad de cuentas: hashing de contraseñas y cuenta administradora inicial
 builder.Services.AddSingleton<IPasswordHasher, IdentityPasswordHasher>();
+
+// Rate limiting del login (defensa en profundidad para exposición pública): límites por IP y
+// por cuenta con bloqueo temporal. Singleton: el contador debe sobrevivir a los scopes.
+builder.Services.AddSingleton<POS.UI.Security.LimitadorLogin>();
 var opcionesAdminInicial = new OpcionesAdminInicial();
 builder.Configuration.GetSection("Seguridad:AdminInicial").Bind(opcionesAdminInicial);
 builder.Services.AddSingleton(opcionesAdminInicial);

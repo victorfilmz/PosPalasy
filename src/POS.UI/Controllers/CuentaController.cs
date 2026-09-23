@@ -18,15 +18,18 @@ public class CuentaController : Controller
 {
     private readonly IAutenticacionService _autenticacion;
     private readonly IUsuarioRepository _usuarios;
+    private readonly LimitadorLogin _limitadorLogin;
     private readonly ILogger<CuentaController> _logger;
 
     public CuentaController(
         IAutenticacionService autenticacion,
         IUsuarioRepository usuarios,
+        LimitadorLogin limitadorLogin,
         ILogger<CuentaController> logger)
     {
         _autenticacion = autenticacion ?? throw new ArgumentNullException(nameof(autenticacion));
         _usuarios = usuarios ?? throw new ArgumentNullException(nameof(usuarios));
+        _limitadorLogin = limitadorLogin ?? throw new ArgumentNullException(nameof(limitadorLogin));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
@@ -48,14 +51,32 @@ public class CuentaController : Controller
         if (!ModelState.IsValid)
             return View(model);
 
-        var resultado = await _autenticacion.AutenticarAsync(model.Usuario, model.Password, DateTime.UtcNow);
+        var ahoraUtc = DateTime.UtcNow;
+        var ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+
+        // Rate limiting (defensa en profundidad): rechaza ANTES de tocar el hasher o la base.
+        if (!_limitadorLogin.Permitir(ip, model.Usuario, ahoraUtc))
+        {
+            var segundos = _limitadorLogin.SegundosRestantes(ip, model.Usuario, ahoraUtc);
+            _logger.LogWarning(
+                "Login rate-limited: cuenta '{Usuario}' desde {Ip} (espera {Segundos}s).",
+                model.Usuario, ip ?? "desconocida", segundos);
+            ModelState.AddModelError(string.Empty,
+                $"Demasiados intentos fallidos. Espere {Math.Max(segundos / 60, 1)} minuto(s) e inténtelo de nuevo.");
+            model.Password = string.Empty;
+            return View(model);
+        }
+
+        var resultado = await _autenticacion.AutenticarAsync(model.Usuario, model.Password, ahoraUtc);
 
         if (!resultado.Exito)
         {
+            _limitadorLogin.RegistrarFallo(ip, model.Usuario, ahoraUtc);
+
             _logger.LogWarning(
                 "Intento de inicio de sesión fallido para '{Usuario}' desde {Ip}. Motivo: {Motivo}",
                 model.Usuario,
-                HttpContext.Connection.RemoteIpAddress?.ToString() ?? "desconocida",
+                ip ?? "desconocida",
                 resultado.Motivo);
 
             // El mensaje proviene del dominio y nunca revela si el usuario existe.
@@ -63,6 +84,8 @@ public class CuentaController : Controller
             model.Password = string.Empty;
             return View(model);
         }
+
+        _limitadorLogin.RegistrarExito(ip, model.Usuario);
 
         var usuario = resultado.Usuario!;
         await SesionUsuario.IniciarSesionAsync(HttpContext, usuario);
