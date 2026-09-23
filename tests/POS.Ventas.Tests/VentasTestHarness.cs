@@ -336,10 +336,16 @@ internal sealed class ClienteDgiiFalso : IDgiiApiClient
         Estado = "Aceptado"
     };
 
+    /// <summary>eNCF transmitidos en orden de envío (del nombre oficial RNC+eNCF.xml), para verificar orden y unicidad.</summary>
+    public System.Collections.Generic.List<string> EncfsEnviados { get; } = new();
+
     public Task<DgiiApiResponse> EnviarFacturaAsync(
         string xml, string nombreArchivo, bool esFacturaConsumo, decimal montoTotal, CancellationToken ct = default)
     {
         EnviosRealizados++;
+        // El nombre de archivo oficial es RNC(11)+eNCF(13)+".xml": se registra el eNCF en orden.
+        if (nombreArchivo is { Length: > 24 } && nombreArchivo.EndsWith(".xml"))
+            EncfsEnviados.Add(nombreArchivo[11..^4]);
         UltimoXmlEnviado = xml;
         UltimoNombreArchivo = nombreArchivo;
         UltimaEsFacturaConsumo = esFacturaConsumo;
