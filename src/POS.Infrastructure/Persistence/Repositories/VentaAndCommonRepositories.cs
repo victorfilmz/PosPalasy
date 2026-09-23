@@ -184,6 +184,16 @@ public class CommonRepositories : IProductoRepository, IClienteRepository, IEnte
             .Take(take)
             .ToListAsync(ct);
 
+    async Task<IEnumerable<MovimientoInventario>> IMovimientoInventarioRepository.GetByTipoYFechaAsync(
+        TipoMovimientoInventario tipo, DateTime desdeUtc, DateTime hastaUtc, CancellationToken ct) =>
+        await _context.MovimientosInventario
+            .Include(m => m.Producto)
+            .Include(m => m.Sucursal)
+            .Include(m => m.Proveedor)
+            .Where(m => m.Tipo == tipo && m.Fecha >= desdeUtc && m.Fecha < hastaUtc)
+            .OrderBy(m => m.Fecha)
+            .ToListAsync(ct);
+
     // Cliente
     async Task<Cliente?> IClienteRepository.GetByIdAsync(int id, CancellationToken ct) =>
         await _context.Clientes.FirstOrDefaultAsync(c => c.Id == id, ct);

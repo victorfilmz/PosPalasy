@@ -1,7 +1,7 @@
 # 15 — Plan FASE 6: reporte 606, contingencia y portal de consultas
 
-> **Fecha:** 23-09-2026 · **Predecesor:** FASE 5 cerrada (doc 13) · **Estado:** Plan — pendiente
-> de autorización del propietario.
+> **Fecha:** 23-09-2026 · **Predecesor:** FASE 5 cerrada (doc 13) · **Estado:** En ejecución —
+> sub-fase 6.0 completada (gate G0 pendiente de cierre con el informe de fase).
 >
 > Los candidatos aquí listados son los identificados en el veredicto del gate 5.6. Este plan
 > sigue el estilo del doc 11: sub-fases pequeñas con gate verificable cada una, commits por
@@ -13,7 +13,7 @@
 
 | Sub-fase | Alcance | Entregable | Gate |
 |---|---|---|---|
-| 6.0 | **Reporte 606** (libro de compras) | `ReportesController` + exportación TXT oficial, patrón del 607 | G0 |
+| 6.0 | **Reporte 606** (libro de compras) | `ReportesController` + exportación TXT oficial, patrón del 607 — **IMPLEMENTADA 23-09-2026** | G0 |
 | 6.1 | **Régimen de contingencia** — declarar y operar | Estados de contingencia del emisor, indicador en el e-CF, cola local sin transmisión | G1 |
 | 6.2 | **Contingencia — recuperación** | Transmisión masiva diferida de comprobantes en contingencia al volver la conectividad | G2 |
 | 6.3 | **Portal de consultas** (UI) | Pantalla de consulta de comprobantes emitidos: estado fiscal, TrackId, mensajes DGII, reenvío manual | G3 |
@@ -26,12 +26,19 @@
 El 607 (ventas) e IT-1 ya operan desde Fase 3. El 606 completa el trío: compras registradas
 del período con RNC del proveedor, NCF de compra, montos e ITBIS soportado.
 
-- Fuente de datos: compras registradas (necesita decisión: ¿existe módulo de compras o se
-  registra como tipos de comprobante de compra en ventas? **Decisión previa del propietario**).
-- Patrón: repetir `ReportesController` + TXT oficial del 607.
-- Estimado: 2–4 días.
-- **Gate G0:** TXT 606 generado desde datos reales, validado contra el formato oficial,
-  pruebas de borde (RNC inválido, NCF e-CF vs NCF tradicional, período vacío).
+- Fuente de datos — **decisión D1 resuelta:** NO existe módulo de compras formal; la fuente es
+  el **kardex** (`MovimientoInventario` con `Tipo=EntradaCompra`), que ya registra proveedor,
+  costo unitario, cantidad y referencia de documento. El NCF de compra se extrae de
+  `ReferenciaDocumento` o del concepto libre (regex NCF tradicional B+10 / electrónico E+11).
+  Limitación conocida y honesta: el costo del kardex no separa ITBIS (columna ITBIS=0) ni forma
+  de pago (01) — ajustable cuando exista módulo de compras.
+- Implementado: `Registro606Dto` + `GenerarRegistros606/606Txt` en `ReporteFiscalService`,
+  `GetByTipoYFechaAsync` en el repositorio del kardex, acciones `Compras606/Exportar606Txt`,
+  vista y entrada en el menú de Reportes.
+- **Gate G0 — evidencia:** build 0/0; suite 306/306 (incluye 2 pruebas del 606: registros,
+  bordes sin proveedor/NCF, formato TXT y período vacío; y el acceso del Contador a la vista
+  por HTTP real en la suite de seguridad). El ITBIS real de compras queda abierto para cuando
+  el propietario decida el módulo de compras.
 
 ### 6.1 — Contingencia: declarar y operar
 
@@ -75,7 +82,7 @@ contra SQL Server y veredicto de la fase.
 
 | # | Decisión / riesgo | Dueño | Antes de |
 |---|---|---|---|
-| D1 | ¿Módulo de compras existe o el 606 se alimenta de otra fuente? | Propietario | 6.0 |
+| D1 | ~~¿Módulo de compras existe o el 606 se alimenta de otra fuente?~~ **RESUELTA:** el 606 se alimenta del kardex (EntradaCompra); sin módulo de compras formal | Propietario | ~~6.0~~ resuelta |
 | D2 | Tipos de contingencia a soportar en 6.1 (DGII permite 1–5; recortar a los reales del negocio) | Propietario + código | 6.1 |
 | D3 | La homologación testecf (doc 14) idealmente ANTES de 6.1–6.3: la evidencia real del cofre de contratos evita construir contingencia sobre supuestos | Operación | 6.1 |
 | D4 | XSD de contingencia: confirmar que `MapaXsdComprobante` cubre el indicador usado | Código | 6.1 |

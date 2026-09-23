@@ -93,6 +93,10 @@
                         <i class="bi bi-file-earmark-spreadsheet"></i>
                         <span class="link-text">Libro Ventas 607</span>
                     </a>
+                    <a asp-controller="Reportes" asp-action="Compras606" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Reportes" && ViewContext.RouteData.Values["action"]?.ToString() == "Compras606" ? "active" : "")" title="Libro de Compras 606">
+                        <i class="bi bi-file-earmark-ruled"></i>
+                        <span class="link-text">Libro Compras 606</span>
+                    </a>
                     <a asp-controller="Reportes" asp-action="ResumenItbis" class="sidebar-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Reportes" && ViewContext.RouteData.Values["action"]?.ToString() == "ResumenItbis" ? "active" : "")" title="Resumen IT-1 (ITBIS)">
                         <i class="bi bi-calculator"></i>
                         <span class="link-text">Resumen IT-1</span>

@@ -39,6 +39,7 @@ public class SeguridadEndpointsTests : IClassFixture<PosAppFactory>
     [InlineData("/Inventario")]
     [InlineData("/Facturacion/Lista")]
     [InlineData("/Reportes/Ventas607")]
+    [InlineData("/Reportes/Compras606")]
     [InlineData("/Reportes/ResumenItbis")]
     [InlineData("/Configuracion/Certificado")]
     [InlineData("/Configuracion/Empresa")]
@@ -196,9 +197,11 @@ public class SeguridadEndpointsTests : IClassFixture<PosAppFactory>
     {
         var cliente = await CrearSesionAsync(_app.CrearUsuario("contador-pruebas", RolUsuario.Contador), PosAppFactory.PasswordAuxiliar);
 
-        var respuesta = await cliente.GetAsync("/Reportes/Ventas607");
-
-        Assert.Equal(HttpStatusCode.OK, respuesta.StatusCode);
+        foreach (var ruta in new[] { "/Reportes/Ventas607", "/Reportes/Compras606", "/Reportes/ResumenItbis" })
+        {
+            var respuesta = await cliente.GetAsync(ruta);
+            Assert.True(respuesta.IsSuccessStatusCode, $"{ruta}: {(int)respuesta.StatusCode}");
+        }
     }
 
     // ---------------------------------------------------------------- antiforgery en operaciones

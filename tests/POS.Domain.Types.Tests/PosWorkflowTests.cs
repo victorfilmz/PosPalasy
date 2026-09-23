@@ -261,4 +261,76 @@ public class PosWorkflowTests
         Assert.Equal(80.00m, itbis.ITBIS16);
         Assert.Equal(260.00m, itbis.TotalITBISDevengado);
     }
+
+    [Fact]
+    public void Reporte606_ConstruyeRegistrosDelKardex_ConProveedorYNCF()
+    {
+        var service = new ReporteFiscalService();
+        var entradas = new List<MovimientoInventario>
+        {
+            new()
+            {
+                Fecha = new DateTime(2026, 9, 5, 14, 30, 0, DateTimeKind.Utc),
+                Tipo = TipoMovimientoInventario.EntradaCompra,
+                CostoUnitario = 1250.55m,
+                Cantidad = 10,
+                ReferenciaDocumento = "B1100000001",
+                Proveedor = new Proveedor { RNC = "101000001", RazonSocial = "Distribuidora Mayorista SRL" } // RNC 9 dígitos
+            },
+            new()
+            {
+                Fecha = new DateTime(2026, 9, 8, 9, 0, 0, DateTimeKind.Utc),
+                Tipo = TipoMovimientoInventario.EntradaCompra,
+                CostoUnitario = 80.00m,
+                Cantidad = 5,
+                Concepto = "Factura Proveedor #B0100000456 — mercancía general",
+                Proveedor = new Proveedor { RNC = "00112345678", RazonSocial = "Juan Pérez" } // Cédula
+            },
+            new()
+            {
+                Fecha = new DateTime(2026, 9, 10, 0, 0, 0, DateTimeKind.Utc),
+                Tipo = TipoMovimientoInventario.EntradaCompra,
+                CostoUnitario = 40.00m,
+                Cantidad = 2
+                // Sin proveedor ni NCF: compra menor / saldo inicial
+            }
+        };
+
+        var registros = service.GenerarRegistros606(entradas);
+
+        Assert.Equal(3, registros.Count);
+
+        // Orden por fecha; NCF desde la referencia directa
+        Assert.Equal("101000001", registros[0].RNC_Cedula);
+        Assert.Equal(1, registros[0].TipoIdentificacion);
+        Assert.Equal("B1100000001", registros[0].NCFCompra);
+        Assert.Equal("20260905", registros[0].FechaComprobante);
+        Assert.Equal(12505.50m, registros[0].MontoFacturado);
+        Assert.Equal("Distribuidora Mayorista SRL", registros[0].RazonSocial);
+
+        // NCF extraído del concepto libre; cédula → tipo 2
+        Assert.Equal(2, registros[1].TipoIdentificacion);
+        Assert.Equal("B0100000456", registros[1].NCFCompra);
+        Assert.Equal(400.00m, registros[1].MontoFacturado);
+
+        // Sin proveedor: RNC de referencia y razón social explícita
+        Assert.Equal("00000000000", registros[2].RNC_Cedula);
+        Assert.Equal("PROVEEDOR NO REGISTRADO", registros[2].RazonSocial);
+        Assert.Equal("", registros[2].NCFCompra);
+
+        // Formato TXT oficial: encabezado 606|RNC|PERIODO|CANTIDAD + líneas delimitadas
+        var txt = service.GenerarArchivo606Txt("13100000001", 2026, 9, registros);
+        Assert.StartsWith("606|13100000001|202609|3", txt);
+        Assert.Contains("101000001|1|B1100000001|1|20260905|12505.50|0.00|0.00|0.00|01", txt);
+    }
+
+    [Fact]
+    public void Reporte606_PeriodoVacio_GeneraSoloEncabezado()
+    {
+        var service = new ReporteFiscalService();
+
+        var txt = service.GenerarArchivo606Txt("13100000001", 2026, 8, service.GenerarRegistros606(new List<MovimientoInventario>()));
+
+        Assert.Equal("606|13100000001|202608|0\r\n", txt);
+    }
 }

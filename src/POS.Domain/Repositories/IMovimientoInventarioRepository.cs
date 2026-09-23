@@ -14,4 +14,11 @@ public interface IMovimientoInventarioRepository
     Task<IEnumerable<MovimientoInventario>> GetByProductoIdAsync(int productoId, CancellationToken ct = default);
     Task<IEnumerable<MovimientoInventario>> GetBySucursalIdAsync(int sucursalId, int take = 100, CancellationToken ct = default);
     Task<IEnumerable<MovimientoInventario>> GetUltimosMovimientosAsync(int take = 100, CancellationToken ct = default);
+
+    /// <summary>
+    /// Movimientos de un tipo dentro de un rango de fechas (inclusive), con Producto/Proveedor
+    /// cargados. Soporta los reportes fiscales por período (p. ej. libro de compras 606).
+    /// </summary>
+    Task<IEnumerable<MovimientoInventario>> GetByTipoYFechaAsync(
+        TipoMovimientoInventario tipo, DateTime desdeUtc, DateTime hastaUtc, CancellationToken ct = default);
 }

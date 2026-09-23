@@ -1,0 +1,124 @@
+@model IEnumerable<POS.Application.DTOs.Registro606Dto>
+@using POS.Domain.Entities
+
+@{
+    ViewData["Title"] = "Reporte Formato 606 DGII";
+    var anio = (int)(ViewBag.Anio ?? 2026);
+    var mes = (int)(ViewBag.Mes ?? 9);
+    var enterprise = ViewBag.Enterprise as Enterprise;
+}
+
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div>
+        <div class="d-flex align-items-center gap-2">
+            <h3 class="fw-bold text-dark mb-0">Libro de Compras Formato 606</h3>
+            <span class="badge bg-primary-subtle text-primary border border-primary-subtle font-tabular">DGII Oficial</span>
+        </div>
+        <p class="text-muted small mb-0">Compras de bienes y servicios registradas en el kardex, para la remisión oficial ante la Dirección General de Impuestos Internos</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a asp-action="Exportar606Txt" asp-route-anio="@anio" asp-route-mes="@mes" class="btn btn-success fw-bold d-flex align-items-center gap-2 shadow-sm">
+            <i class="bi bi-file-earmark-arrow-down"></i>Descargar 606 (.txt)
+        </a>
+        <a asp-action="Ventas607" asp-route-anio="@anio" asp-route-mes="@mes" class="btn btn-outline-primary fw-semibold d-flex align-items-center gap-2">
+            <i class="bi bi-cart-check"></i>Libro de Ventas 607
+        </a>
+    </div>
+</div>
+
+<!-- Filtros de Período Fiscal -->
+<div class="card border-0 shadow-sm rounded-4 mb-4 bg-white">
+    <div class="card-body p-3">
+        <form method="get" class="row g-3 align-items-center">
+            <div class="col-auto">
+                <span class="fw-bold small text-slate-700"><i class="bi bi-calendar-event me-1 text-primary"></i>Período Fiscal:</span>
+            </div>
+            <div class="col-auto">
+                <select name="mes" class="form-select form-select-sm fw-semibold">
+                    @for (int m = 1; m <= 12; m++)
+                    {
+                        var nomMes = new DateTime(2026, m, 1).ToString("MMMM", new System.Globalization.CultureInfo("es-DO"));
+                        var esActual = m == mes;
+                        <option value="@m" selected="@esActual">@nomMes.ToUpper() (@m.ToString("D2"))</option>
+                    }
+                </select>
+            </div>
+            <div class="col-auto">
+                <select name="anio" class="form-select form-select-sm fw-semibold">
+                    @for (int y = 2024; y <= 2027; y++)
+                    {
+                        var esActualY = y == anio;
+                        <option value="@y" selected="@esActualY">@y</option>
+                    }
+                </select>
+            </div>
+            <div class="col-auto">
+                <button type="submit" class="btn btn-sm btn-primary fw-semibold px-3">
+                    <i class="bi bi-search me-1"></i>Consultar Período
+                </button>
+            </div>
+            <div class="col text-end small text-muted font-tabular">
+                <span>RNC Emisor: <strong class="text-dark">@(enterprise?.RNC ?? "13100000001")</strong></span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Tabla Oficial Formato 606 -->
+<div class="card border-0 shadow-sm rounded-4 overflow-hidden bg-white">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table-pos mb-0">
+                <thead>
+                    <tr>
+                        <th class="ps-4">#</th>
+                        <th>RNC / Cédula</th>
+                        <th>Razón Social Proveedor</th>
+                        <th>NCF Compra</th>
+                        <th>Fecha Comprobante</th>
+                        <th class="text-end">Monto Facturado</th>
+                        <th class="text-end pe-4">ITBIS Facturado</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (Model == null || !Model.Any())
+                    {
+                        <tr>
+                            <td colspan="7" class="text-center py-5 text-muted">
+                                <i class="bi bi-calendar-x fs-1 d-block mb-2 text-secondary"></i>
+                                No se registran compras para el período fiscal seleccionado. Registre entradas por compra en el kardex con proveedor y NCF del comprobante.
+                            </td>
+                        </tr>
+                    }
+                    else
+                    {
+                        foreach (var r in Model)
+                        {
+                            <tr>
+                                <td class="ps-4 text-muted font-tabular">@r.Secuencia</td>
+                                <td class="font-monospace fw-semibold">@r.RNC_Cedula</td>
+                                <td class="text-truncate" style="max-width: 220px;" title="@r.RazonSocial">@r.RazonSocial</td>
+                                <td class="font-monospace text-primary fw-bold">
+                                    @(string.IsNullOrEmpty(r.NCFCompra) ? Html.Raw("<span class=\"text-muted\">—</span>") : r.NCFCompra)
+                                </td>
+                                <td class="text-muted small font-tabular">@r.FechaComprobante</td>
+                                <td class="text-end font-tabular fw-bold text-dark">RD$ @r.MontoFacturado.ToString("N2")</td>
+                                <td class="text-end pe-4 font-tabular text-success fw-bold">RD$ @r.ITBISFacturado.ToString("N2")</td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+                @if (Model != null && Model.Any())
+                {
+                    <tfoot class="bg-light fw-bold">
+                        <tr style="border-top: 2px solid #cbd5e1;">
+                            <td colspan="5" class="ps-4 font-tabular text-slate-800">TOTALES DEL PERÍODO (@Model.Count() compras):</td>
+                            <td class="text-end text-primary font-tabular">RD$ @Model.Sum(x => x.MontoFacturado).ToString("N2")</td>
+                            <td class="text-end pe-4 text-success font-tabular">RD$ @Model.Sum(x => x.ITBISFacturado).ToString("N2")</td>
+                        </tr>
+                    </tfoot>
+                }
+            </table>
+        </div>
+    </div>
+</div>

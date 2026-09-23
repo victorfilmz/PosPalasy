@@ -106,4 +106,67 @@ public class ReporteFiscalService : IReporteFiscalService
 
         return sb.ToString();
     }
+
+    /// <summary>
+    /// Libro de compras 606 desde el kardex: cada entrada por compra (EntradaCompra) del período,
+    /// con el proveedor y el NCF declarado en el concepto/referencia. El concepto de la entrada
+    /// "Factura Proveedor #NCF" es la fuente del NCF cuando la referencia no lo trae.
+    /// </summary>
+    public List<Registro606Dto> GenerarRegistros606(IEnumerable<MovimientoInventario> entradasCompra)
+    {
+        var lista = new List<Registro606Dto>();
+        int sec = 1;
+
+        foreach (var m in entradasCompra.OrderBy(m => m.Fecha).ThenBy(m => m.Id))
+        {
+            var rnc = m.Proveedor?.RNC?.Trim() ?? "";
+            int tipoId = rnc.Length == 11 ? 2 // Cédula
+                : rnc.Length == 9 ? 1          // RNC Empresa
+                : !string.IsNullOrEmpty(rnc) ? 3 // Pasaporte / Exterior
+                : 1;                            // Sin proveedor: RNC de referencia 000-0000000-0
+
+            var reg = new Registro606Dto
+            {
+                Secuencia = sec++,
+                RNC_Cedula = string.IsNullOrWhiteSpace(rnc) ? "00000000000" : rnc,
+                TipoIdentificacion = tipoId,
+                RazonSocial = string.IsNullOrWhiteSpace(m.Proveedor?.RazonSocial)
+                    ? "PROVEEDOR NO REGISTRADO"
+                    : m.Proveedor!.RazonSocial.Trim(),
+                NCFCompra = ExtraerNCF(m.ReferenciaDocumento) ?? ExtraerNCF(m.Concepto) ?? "",
+                FechaComprobante = m.Fecha.ToString("yyyyMMdd"),
+                MontoFacturado = Math.Round(m.CostoUnitario * m.Cantidad, 2),
+                ITBISFacturado = 0 // El costo del kardex no separa ITBIS; ajustable cuando el módulo de compras lo registre
+            };
+
+            lista.Add(reg);
+        }
+
+        return lista;
+    }
+
+    public string GenerarArchivo606Txt(string rncEmisor, int anio, int mes, List<Registro606Dto> registros)
+    {
+        var sb = new StringBuilder();
+        var periodo = $"{anio:D4}{mes:D2}";
+
+        // Encabezado formato oficial DGII 606:
+        // 606|RNC|PERIODO|CANTIDAD_REGISTROS
+        sb.AppendLine($"606|{rncEmisor.Trim()}|{periodo}|{registros.Count}");
+
+        foreach (var reg in registros)
+        {
+            sb.AppendLine(reg.ToDgiiDelimitedLine());
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>Extrae un NCF de un texto libre: tradicional (B + 10 dígitos) o electrónico (E + 11 dígitos).</summary>
+    private static string? ExtraerNCF(string? texto)
+    {
+        if (string.IsNullOrWhiteSpace(texto)) return null;
+        var match = System.Text.RegularExpressions.Regex.Match(texto, @"\b[BE][0-9]{10,11}\b");
+        return match.Success ? match.Value : null;
+    }
 }

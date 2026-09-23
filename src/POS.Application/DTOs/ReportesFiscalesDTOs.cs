@@ -47,6 +47,45 @@ public class Registro607Dto
 }
 
 /// <summary>
+/// Representa una fila del Formato 606 (Libro de Compras de Bienes y Servicios) oficial de la DGII.
+/// Se alimenta del kardex: cada entrada por compra con proveedor y NCF de referencia.
+/// </summary>
+public class Registro606Dto
+{
+    public int Secuencia { get; set; }
+
+    /// <summary>RNC o cédula del proveedor; "000-0000000-0" de referencia si la entrada no lo registra.</summary>
+    public string RNC_Cedula { get; set; } = string.Empty;
+
+    /// <summary>1=RNC, 2=Cédula, 3=Pasaporte/Exterior.</summary>
+    public int TipoIdentificacion { get; set; } = 1;
+    public string RazonSocial { get; set; } = string.Empty;
+
+    /// <summary>NCF del comprobante de compra declarado por el proveedor; vacío si no se registró.</summary>
+    public string NCFCompra { get; set; } = string.Empty;
+
+    /// <summary>1=Válido (estado por defecto; el sistema no registra compras anuladas de terceros).</summary>
+    public int TipoBienServicioComprado { get; set; } = 1;
+
+    /// <summary>Fecha de la entrada por compra (YYYYMMDD).</summary>
+    public string FechaComprobante { get; set; } = string.Empty;
+
+    /// <summary>Monto neto gravado de la compra (costo unitario × cantidad).</summary>
+    public decimal MontoFacturado { get; set; }
+    public decimal ITBISFacturado { get; set; }
+    public decimal ITBISRetenido { get; set; }
+    public decimal ITBISPercibido { get; set; }
+
+    /// <summary>Forma de pago de la compra: 01=Efectivo, 02=Crédito (otras no registradas).</summary>
+    public string FormaDePago { get; set; } = "01";
+
+    /// <summary>Genera la línea delimitada por tuberías '|' del formato oficial 606.</summary>
+    public string ToDgiiDelimitedLine() =>
+        $"{RNC_Cedula}|{TipoIdentificacion}|{NCFCompra}|{TipoBienServicioComprado}|{FechaComprobante}|" +
+        $"{MontoFacturado:F2}|{ITBISFacturado:F2}|{ITBISRetenido:F2}|{ITBISPercibido:F2}|{FormaDePago}";
+}
+
+/// <summary>
 /// Resumen fiscal consolidado para la declaración jurada mensual del ITBIS (Formulario IT-1).
 /// </summary>
 public class ResumenItbisMensualDto
