@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>HomologacionTestECF</RootNamespace>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <!-- Los subproyectos de dryrun/ compilan por separado: no son parte del verificador. -->
+  <ItemGroup>
+    <Compile Remove="dryrun/**" />
+    <None Remove="dryrun/**" />
+    <Content Remove="dryrun/**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\POS.Infrastructure\POS.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.12" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.12" />
+  </ItemGroup>
+
+  <!-- XSDs oficiales DGII al output: el script pre-valida cada comprobante contra su esquema
+       antes de transmitirlo (la DGII rechaza con menos detalle que la validación local). -->
+  <ItemGroup>
+    <None Include="..\..\documentacion xsd\**\*.xsd" Link="documentacion xsd\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

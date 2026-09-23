@@ -41,3 +41,7 @@ desktop.ini
 .agents/
 .freebuff/
 docs/superpowers/
+
+# Verificador de homologación TestECF: configuración real (contraseña del certificado) y artefactos
+tools/HomologacionTestECF/appsettings.Homologacion.json
+tools/HomologacionTestECF/artifacts/

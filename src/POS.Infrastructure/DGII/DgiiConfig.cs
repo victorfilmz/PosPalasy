@@ -41,15 +41,34 @@ public class DgiiConfig
     /// </summary>
     public bool GrabarTransmisiones { get; set; } = false;
 
+    /// <summary>
+    /// SOLO para ensayos (dry-run del verificador de homologación contra un servidor falso local):
+    /// sustituye la autoridad del host e-CF (p. ej. "http://127.0.0.1:8443/testecf"). Las rutas
+    /// oficiales se derivan igual; nunca configurar en producción ni en la aplicación.
+    /// </summary>
+    public string? HostECFOverride { get; set; }
+
+    /// <summary>SOLO para ensayos: sustituye la autoridad del host RFCE. Mismas condiciones que <see cref="HostECFOverride"/>.</summary>
+    public string? HostRFCEOverride { get; set; }
+
     public int TimeoutSeconds { get; set; } = 30;
     public int MaxRetries { get; set; } = 3;
     public int RetryDelayMs { get; set; } = 1000;
 
-    /// <summary>Resuelve los endpoints oficiales para el ambiente configurado.</summary>
-    public DgiiEndpoints Endpoints() => DgiiEndpoints.De(Ambiente);
+    /// <summary>Resuelve los endpoints oficiales para el ambiente configurado (con overrides de ensayo si existen).</summary>
+    public DgiiEndpoints Endpoints()
+    {
+        var endpoints = DgiiEndpoints.De(Ambiente);
+        if (HostECFOverride is null && HostRFCEOverride is null) return endpoints;
+        return new DgiiEndpoints
+        {
+            HostECF = HostECFOverride ?? endpoints.HostECF,
+            HostRFCE = HostRFCEOverride ?? endpoints.HostRFCE
+        };
+    }
 
     /// <summary>URL raíz del host e-CF del ambiente (informativo, diagnóstico y conectividad).</summary>
-    public string HostECF() => Ambiente switch
+    public string HostECF() => HostECFOverride ?? Ambiente switch
     {
         AmbienteDgii.CertECF => "https://ecf.dgii.gov.do/certecf",
         AmbienteDgii.Produccion => "https://ecf.dgii.gov.do/ecf",
@@ -57,7 +76,7 @@ public class DgiiConfig
     };
 
     /// <summary>URL raíz del host RFCE (facturas de consumo &lt; RD$250,000) del ambiente.</summary>
-    public string HostRFCE() => Ambiente switch
+    public string HostRFCE() => HostRFCEOverride ?? Ambiente switch
     {
         AmbienteDgii.CertECF => "https://fc.dgii.gov.do/Certecf",
         AmbienteDgii.Produccion => "https://fc.dgii.gov.do/ecf",

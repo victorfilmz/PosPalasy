@@ -11,4 +11,7 @@
     <Project Path="tests/POS.UI.SecurityTests/POS.UI.SecurityTests.csproj" />
     <Project Path="tests/POS.Ventas.Tests/POS.Ventas.Tests.csproj" />
   </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/HomologacionTestECF/HomologacionTestECF.csproj" />
+  </Folder>
 </Solution>

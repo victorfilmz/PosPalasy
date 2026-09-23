@@ -21,6 +21,8 @@
 > 📁 [18_Solicitud_DGII_Habilitacion.md](18_Solicitud_DGII_Habilitacion.md) — **Carta formal a la DGII: habilitación como emisor electrónico y acceso TestECF (plantilla lista para completar)**
 > 📁 [19_Paquete_Solicitud_Certificado.md](19_Paquete_Solicitud_Certificado.md) — **Paquete de solicitud del certificado A1: comparativa Avansi/Cámara de Comercio verificada, checklist de documentos, formulario precargado y plan de ejecución**
 > 📁 [20_Carta_Autorizacion_Firmante.md](20_Carta_Autorizacion_Firmante.md) — **Carta de autorización del firmante: designación del titular del certificado (apoderado) con checklist de firma y legalización**
+>
+> **Herramienta:** `tools/HomologacionTestECF/` — verificador ejecutable de los 8 casos de homologación del doc 12 §4 (listo para credenciales TestECF; ensayado 8/8 contra DGII falsa con verificación de firma).
 > 📁 [README.md](README.md) — Documentación principal y guía de inicio
 >
 > ---

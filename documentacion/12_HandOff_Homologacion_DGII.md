@@ -57,6 +57,19 @@ puede firmar, los comprobantes quedarán en cola con reintento (por diseño, no 
 
 ## 4. Plan de verificación en `testecf` (casos en orden) — CHECKLIST EJECUTABLE
 
+> **Ejecutable automatizado:** los 8 casos de esta sección corren con un solo comando
+>
+> ```bash
+> dotnet run --project tools/HomologacionTestECF
+> ```
+>
+> El verificador (`tools/HomologacionTestECF/README.md`) reutiliza los componentes reales del
+> pipeline (serializer XSD, firmador XML-DSig, autenticador, cliente DGII), valida pre-requisitos,
+> ejecuta los casos en orden con aserciones, y produce informe + bitácora de contratos en
+> `artifacts/homologacion-testecf/`. Ensayado de punta a punta contra una DGII falsa con
+> verificación criptográfica de firma (dry-run en `tools/HomologacionTestECF/dryrun/`):
+> 8/8 PASS. En testecf real se ejecuta con las credenciales del checklist §2.
+>
 > **Preparación (una sola vez, antes del caso 1):**
 >
 > | # | Paso | Verificación |
