@@ -141,6 +141,15 @@ public class VentaDevolucionNotaCreditoEndToEndTests : IClassFixture<PosAppFacto
         Assert.Equal(EstadoFacturaElectronica.Aceptado.ToString(), notaAceptada.EstadoDgii);
         Assert.NotNull(notaAceptada.FechaAprobacion);
 
+        // Portal de consultas (6.3): el reenvío manual por la UI deja traza de auditoría —
+        // quién reenvió, qué comprobante y con qué resultado.
+        var auditoria = await contexto4.Set<POS.Domain.Entities.AuditoriaCambio>().AsNoTracking()
+            .SingleOrDefaultAsync(a => a.Entidad == "ElectronicInvoice" && a.Campo == "ReenvioManual");
+        Assert.NotNull(auditoria);
+        Assert.Equal(nota.eNCF, auditoria!.ValorAnterior);
+        Assert.Contains("TrackId=", auditoria.ValorNuevo);
+        Assert.False(string.IsNullOrWhiteSpace(auditoria.Usuario));
+
         // ---------------------------------------------------------------- idempotencia desde la UI
         var reintento = await PostFormularioAsync(
             sesion, $"/Facturacion/EmitirNotaCredito?devolucionId={devolucionId}", new Dictionary<string, string>());

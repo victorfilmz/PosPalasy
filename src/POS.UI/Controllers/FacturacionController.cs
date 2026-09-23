@@ -26,19 +26,22 @@ public class FacturacionController : Controller
     private readonly IAnulacionRepository _anulacionRepo;
     private readonly IElectronicInvoiceService _invoiceService;
     private readonly EmitirNotaCreditoDevolucionHandler _notaCreditoHandler;
+    private readonly IAuditoriaRepository _auditoriaRepo;
 
     public FacturacionController(
         IInvoiceRepository invoiceRepo,
         IEnterpriseRepository enterpriseRepo,
         IAnulacionRepository anulacionRepo,
         IElectronicInvoiceService invoiceService,
-        EmitirNotaCreditoDevolucionHandler notaCreditoHandler)
+        EmitirNotaCreditoDevolucionHandler notaCreditoHandler,
+        IAuditoriaRepository auditoriaRepo)
     {
         _invoiceRepo = invoiceRepo;
         _enterpriseRepo = enterpriseRepo;
         _anulacionRepo = anulacionRepo;
         _invoiceService = invoiceService;
         _notaCreditoHandler = notaCreditoHandler;
+        _auditoriaRepo = auditoriaRepo;
     }
 
     public async Task<IActionResult> Lista(EstadoFacturaElectronica? estado = null)
@@ -122,6 +125,11 @@ public class FacturacionController : Controller
         return RedirectToAction(nameof(Detalle), new { id });
     }
 
+    /// <summary>
+    /// Portal de consultas (6.3): el listado ya muestra estado fiscal, TrackId y mensajes de la
+    /// DGII. El reenvío manual queda en este controlador con política de SUPERVISIÓN y traza de
+    /// auditoría: quién reenvió qué comprobante y cuándo.
+    /// </summary>
     [HttpPost]
     [Authorize(Policy = Politicas.Supervision)]
     public async Task<IActionResult> Reenviar(string encf)
@@ -131,6 +139,19 @@ public class FacturacionController : Controller
             TempData["Mensaje"] = $"Factura reenviada a DGII. TrackId: {response.TrackId}";
         else
             TempData["Error"] = $"Fallo al reenviar: {response.Mensaje}";
+
+        // Trazabilidad del reenvío manual (6.3): siempre se registra, exitoso o no.
+        await _auditoriaRepo.RegistrarAsync(new Domain.Entities.AuditoriaCambio
+        {
+            Usuario = SesionUsuario.ObtenerNombre(User) ?? "desconocido",
+            Entidad = "ElectronicInvoice",
+            Campo = "ReenvioManual",
+            ValorAnterior = encf,
+            ValorNuevo = response.Exitoso
+                ? $"TrackId={response.TrackId ?? "sin-track"}"
+                : $"Fallo: {response.Mensaje}",
+            Motivo = "Reenvío manual desde el portal de consultas"
+        });
 
         return RedirectToAction(nameof(Lista));
     }
