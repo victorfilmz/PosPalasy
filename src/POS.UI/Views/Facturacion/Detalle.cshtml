@@ -43,6 +43,12 @@
                 </button>
             </form>
         }
+        @if (Model.Estado is EstadoFacturaElectronica.PendienteReenvio or EstadoFacturaElectronica.NoEnviado && !Model.TipoContingencia.HasValue)
+        {
+            <button type="button" class="btn btn-outline-secondary fw-semibold d-flex align-items-center gap-2" data-bs-toggle="modal" data-bs-target="#modalContingencia">
+                <i class="bi bi-cloud-slash"></i>Declarar Contingencia
+            </button>
+        }
         <a asp-controller="Pos" asp-action="Ticket" asp-route-id="@Model.Id" target="_blank" class="btn btn-dark fw-semibold d-flex align-items-center gap-2 shadow-sm">
             <i class="bi bi-printer"></i>Imprimir Ticket Térmico
         </a>
@@ -403,3 +409,41 @@
         </form>
     </div>
 </div>
+
+@if (Model.Estado is EstadoFacturaElectronica.PendienteReenvio or EstadoFacturaElectronica.NoEnviado && !Model.TipoContingencia.HasValue)
+{
+    <div class="modal fade" id="modalContingencia" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <form asp-action="DeclararContingencia" method="post">
+                <input type="hidden" name="id" value="@Model.Id" />
+                <div class="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                    <div class="modal-header bg-dark text-white py-3 px-4">
+                        <h5 class="modal-title fw-bold text-white"><i class="bi bi-cloud-slash-fill me-2"></i>Declarar Contingencia — @Model.eNCF</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body p-4">
+                        <div class="alert alert-info small">
+                            <strong>Reglamento e-CF:</strong> al declarar contingencia, la ventana de transmisión de este comprobante queda fijada en 30 días calendario desde ahora. La primera declaración es la que manda y no puede sobrescribirse.
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold small text-slate-700">Tipo de Contingencia (DGII 1–5)</label>
+                            <select name="tipoContingencia" class="form-select" required>
+                                <option value="3" selected>3 - Falla de la plataforma de la DGII</option>
+                                <option value="1">1 - Falla técnica en sistemas del emisor</option>
+                                <option value="2">2 - Falla en la entrega de insumos</option>
+                                <option value="4">4 - Corte del certificado digital</option>
+                                <option value="5">5 - Recorte de energía eléctrica</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer bg-light px-4 py-3">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-dark fw-bold d-flex align-items-center gap-2 px-4 shadow-sm">
+                            <i class="bi bi-cloud-slash"></i>Declarar Contingencia
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+}

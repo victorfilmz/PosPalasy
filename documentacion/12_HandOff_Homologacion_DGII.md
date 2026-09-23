@@ -55,7 +55,22 @@ Suite actual: **258/258 pruebas** · build 0/0 · arranque real contra SQL Serve
 **"El sistema puede firmar comprobantes"** antes de intentar cualquier envío. Si muestra que NO
 puede firmar, los comprobantes quedarán en cola con reintento (por diseño, no se pierden).
 
-## 4. Plan de verificación en `testecf` (casos en orden)
+## 4. Plan de verificación en `testecf` (casos en orden) — CHECKLIST EJECUTABLE
+
+> **Preparación (una sola vez, antes del caso 1):**
+>
+> | # | Paso | Verificación |
+> |---|---|---|
+> | P1 | Instalar el `.pfx` del emisor | Configuración → Certificado: "El sistema puede firmar comprobantes" |
+> | P2 | Cargar rangos e-NCF E31/E32 de testecf | Configuración → Secuencias: rango activo visible |
+> | P3 | `user-secrets` con `Certificado:Password` | `dotnet user-secrets set "Certificado:Password" "..."` |
+> | P4 | Arrancar en Development con cofre activo | `appsettings.Development.json`: `DGII:GrabarTransmisiones=true`, `ModoSimulador=false` |
+> | P5 | Abrir el cofre | `artifacts/cofre-dgii/sesion-*.json` debe crearse con la primera respuesta |
+>
+> **Después de cada caso:** guardar la respuesta del cofre y compararla con los fixtures de
+> `GrabadorTransmisionesDGIITests` — cualquier diferencia de contrato se ajusta en el parser del
+> método correspondiente y se convierte en un nuevo fixture.
+
 
 1. **Autenticación real:** arranque con `ModoSimulador=false` → intentar autenticación.
    *Éxito:* token emitido (log "Token DGII renovado"). *Fallo típico:* semilla rechazada

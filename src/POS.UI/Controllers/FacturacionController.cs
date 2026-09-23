@@ -164,6 +164,50 @@ public class FacturacionController : Controller
         return View(anulaciones);
     }
 
+    /// <summary>
+    /// Declaración MANUAL de contingencia (6.1, complemento de la automática): si la falla de la
+    /// DGII NO se detectó al transmitir (ej. el sistema se reinició durante la caída) o el tipo de
+    /// contingencia real del negocio es otro (certificado, energía, insumos), la supervisión la
+    /// declara aquí con su tipo oficial. Idempotente: la primera declaración fija la ventana.
+    /// </summary>
+    [HttpPost]
+    [Authorize(Policy = Politicas.Supervision)]
+    public async Task<IActionResult> DeclararContingencia(int id, int tipoContingencia)
+    {
+        var invoice = await _invoiceRepo.GetByIdAsync(id);
+        if (invoice == null) return NotFound();
+
+        if (!Enum.IsDefined(typeof(TipoContingenciaDgii), tipoContingencia))
+        {
+            TempData["Error"] = "Tipo de contingencia inválido (debe ser 1–5 según el reglamento e-CF).";
+            return RedirectToAction(nameof(Detalle), new { id });
+        }
+
+        var declaracion = ServicioContingencia.Declarar(invoice,
+            new DeclararContingenciaCommand(id, (TipoContingenciaDgii)tipoContingencia, DateTime.UtcNow));
+
+        if (declaracion.Exitoso)
+        {
+            await _invoiceRepo.UpdateAsync(invoice);
+            await _auditoriaRepo.RegistrarAsync(new Domain.Entities.AuditoriaCambio
+            {
+                Usuario = SesionUsuario.ObtenerNombre(User) ?? "desconocido",
+                Entidad = "ElectronicInvoice",
+                Campo = "TipoContingencia",
+                ValorAnterior = "(sin contingencia)",
+                ValorNuevo = $"{invoice.TipoContingencia} (ventana hasta {invoice.ContingenciaHastaUtc:dd-MM-yyyy HH:mm} UTC)",
+                Motivo = "Declaración manual de contingencia desde el portal de consultas"
+            });
+            TempData["Mensaje"] = declaracion.Mensaje;
+        }
+        else
+        {
+            TempData["Error"] = declaracion.Mensaje;
+        }
+
+        return RedirectToAction(nameof(Detalle), new { id });
+    }
+
     [HttpPost]
     [Authorize(Policy = Politicas.Supervision)]
     public async Task<IActionResult> Anular(int id, int codigoMotivo, string motivo)
