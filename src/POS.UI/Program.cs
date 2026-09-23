@@ -20,6 +20,7 @@ using POS.Application.Security;
 using POS.Application.Services;
 using POS.Domain.Repositories;
 using POS.Infrastructure.DGII;
+using POS.Infrastructure.DGII.Recording;
 using POS.Infrastructure.Persistence;
 using POS.Infrastructure.Persistence.Repositories;
 using POS.Infrastructure.Security;
@@ -58,6 +59,20 @@ builder.Services.AddDbContext<POSDbContext>(options =>
 var dgiiConfig = new DgiiConfig();
 builder.Configuration.GetSection("DGII").Bind(dgiiConfig);
 builder.Services.AddSingleton(dgiiConfig);
+
+// Cofre de contratos DGII: cuando GrabarTransmisiones=true, cada respuesta HTTP de la DGII se
+// graba en un JSON por sesión (artifacts/cofre-dgii/), insumo para actualizar los contratos
+// asumidos de la KB tras el primer contacto real con testecf. Nunca activo fuera de Development.
+var rutaCofre = Path.Combine(builder.Environment.ContentRootPath, "artifacts", "cofre-dgii",
+    $"sesion-{DateTime.Now:yyyyMMdd-HHmmss}.json");
+builder.Services.AddSingleton(sp =>
+{
+    var grabar = dgiiConfig.GrabarTransmisiones && builder.Environment.IsDevelopment();
+    Directory.CreateDirectory(Path.GetDirectoryName(rutaCofre)!);
+    return new GrabadorTransmisionesDGII(
+        grabar ? rutaCofre : "",
+        sp.GetRequiredService<ILogger<GrabadorTransmisionesDGII>>());
+});
 
 // Autenticación por cookie y autorización por políticas (matriz de permisos)
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
@@ -101,14 +116,22 @@ builder.Services.AddSingleton<IXmlDigitalSigner, XmlDigitalSigner>();
 // cliente lo recibe por DI y renueva el token UNA vez ante 401/403 antes de rendirse.
 // El autenticador es SINGLETON porque guarda la caché del token: un registro transitorio (typed
 // client) la descartaría en cada scope y forzaría re-autenticación en cada envío.
-builder.Services.AddHttpClient("DgiiAutenticacion");
+builder.Services.AddHttpClient("DgiiAutenticacion")
+    .AddHttpMessageHandler(sp => new GrabadorTransmisionesHandler(
+        dgiiConfig.GrabarTransmisiones && builder.Environment.IsDevelopment()
+            ? sp.GetRequiredService<GrabadorTransmisionesDGII>()
+            : null));
 builder.Services.AddSingleton<IDgiiAuthenticator>(sp => new DgiiAuthenticator(
     sp.GetRequiredService<IHttpClientFactory>().CreateClient("DgiiAutenticacion"),
     sp.GetRequiredService<DgiiConfig>(),
     sp.GetRequiredService<IProveedorCertificadoDigital>(),
     sp.GetRequiredService<IFirmadorComprobanteECF>(),
     sp.GetRequiredService<ILogger<DgiiAuthenticator>>()));
-builder.Services.AddHttpClient<IDgiiApiClient, DgiiApiClient>();
+builder.Services.AddHttpClient<IDgiiApiClient, DgiiApiClient>()
+    .AddHttpMessageHandler(sp => new GrabadorTransmisionesHandler(
+        dgiiConfig.GrabarTransmisiones && builder.Environment.IsDevelopment()
+            ? sp.GetRequiredService<GrabadorTransmisionesDGII>()
+            : null));
 
 // Repositorios
 builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();

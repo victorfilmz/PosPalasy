@@ -13,7 +13,9 @@
 > 📁 [10_Caja_Devoluciones.md](10_Caja_Devoluciones.md) — **Caja: devoluciones transaccionales, reembolso, trazabilidad, arqueo y cierre**
 > 📁 [11_Plan_Fase5_Fiscal.md](11_Plan_Fase5_Fiscal.md) — **Plan FASE 5 fiscal: XML-DSig, XSD, autenticación DGII, ANECF (gates G0–G5)**
 > 📁 [12_HandOff_Homologacion_DGII.md](12_HandOff_Homologacion_DGII.md) — **Hand-off de homologación: checklist TestECF, certificado, plan de verificación y criterio de éxito**
-> 📁 [13_Gate_Final_Fase5.md](13_Gate_Final_Fase5.md) — **Gate final de FASE 5: informe, evidencia 293/293 y veredicto PASS**
+> 📁 [13_Gate_Final_Fase5.md](13_Gate_Final_Fase5.md) — **Gate final de FASE 5: informe, evidencia y veredicto PASS**
+> 📁 [14_Tramite_Certificado_A1.md](14_Tramite_Certificado_A1.md) — **Trámite operativo: certificado A1 y habilitación como emisor electrónico (testecf)**
+> 📁 [15_Plan_Fase6.md](15_Plan_Fase6.md) — **Plan FASE 6: reporte 606, contingencia y portal de consultas (sub-fases 6.0–6.4)**
 > 📁 [README.md](README.md) — Documentación principal y guía de inicio
 >
 > ---
@@ -67,7 +69,7 @@
 > |------|--------|------------|
 > | Fase 1–4: Tipos, contratos, DGII base, BD y venta transaccional | ✅ Completadas (gates previos) | docs 05–10 |
 > | Fase 5: Integración fiscal (XSD, firma, autenticación, RFCE/e-CF, NC 34, ANECF, secuencias) | ✅ **Completada — gate final PASS** | docs 11 y 13 |
-> | Fase 6: Integración UI / reportes 606-607-IT-1 | ⬜ Pendiente de autorización | — |
+> | Fase 6: reporte 606, régimen de contingencia y portal de consultas | ⬜ Plan listo — pendiente de autorización | doc 15 |
 >
 > **Nota:** el plan de 19 semanas de esta página es el estimado histórico del diseño; la ejecución real
 > por fases y gates quedó registrada en los informes citados.

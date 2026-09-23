@@ -34,6 +34,13 @@ public class DgiiConfig
     /// <summary>Modo simulador: sin red ni certificado (desarrollo y pruebas).</summary>
     public bool ModoSimulador { get; set; } = false;
 
+    /// <summary>
+    /// Cofre de contratos: graba cada respuesta HTTP real de la DGII en un JSON por sesión.
+    /// Solo tiene efecto en Development; insumo para verificar/actualizar los contratos asumidos
+    /// de la KB tras el primer contacto con testecf.
+    /// </summary>
+    public bool GrabarTransmisiones { get; set; } = false;
+
     public int TimeoutSeconds { get; set; } = 30;
     public int MaxRetries { get; set; } = 3;
     public int RetryDelayMs { get; set; } = 1000;
