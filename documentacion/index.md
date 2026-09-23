@@ -17,6 +17,7 @@
 > 📁 [14_Tramite_Certificado_A1.md](14_Tramite_Certificado_A1.md) — **Trámite operativo: certificado A1 y habilitación como emisor electrónico (testecf)**
 > 📁 [15_Plan_Fase6.md](15_Plan_Fase6.md) — **Plan FASE 6: reporte 606, contingencia y portal de consultas (sub-fases 6.0–6.4)**
 > 📁 [16_Runbook_Produccion.md](16_Runbook_Produccion.md) — **Runbook de producción: checklist de arranque, monitoreo /health, backups y operación diaria**
+> 📁 [17_Gate_Final_Fase6.md](17_Gate_Final_Fase6.md) — **Gate final de FASE 6: informe, evidencia 313/313 y veredicto PASS**
 > 📁 [README.md](README.md) — Documentación principal y guía de inicio
 >
 > ---
@@ -70,7 +71,7 @@
 > |------|--------|------------|
 > | Fase 1–4: Tipos, contratos, DGII base, BD y venta transaccional | ✅ Completadas (gates previos) | docs 05–10 |
 > | Fase 5: Integración fiscal (XSD, firma, autenticación, RFCE/e-CF, NC 34, ANECF, secuencias) | ✅ **Completada — gate final PASS** | docs 11 y 13 |
-> | Fase 6: reporte 606, régimen de contingencia y portal de consultas | ⬜ Plan listo — pendiente de autorización | doc 15 |
+> | Fase 6: reporte 606, régimen de contingencia y portal de consultas | ✅ **Completada — gate final PASS** | docs 15 y 17 |
 >
 > **Nota:** el plan de 19 semanas de esta página es el estimado histórico del diseño; la ejecución real
 > por fases y gates quedó registrada en los informes citados.
