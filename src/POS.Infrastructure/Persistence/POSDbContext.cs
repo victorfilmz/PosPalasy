@@ -299,6 +299,9 @@ public class POSDbContext : DbContext
             b.Property(ei => ei.MontoImpuestoAdicional).HasPrecision(18, 2);
             b.Property(ei => ei.MontoTotal).HasPrecision(18, 2);
 
+            // Régimen de contingencia (6.1): metadato local del emisor (tipo 1–5 y ventana de 30 días).
+            b.Property(ei => ei.TipoContingencia).HasConversion<int>();
+
             // Unicidad de la numeración VIGENTE: un rechazo con secuenciaUtilizada=false devuelve
             // el número al pool (5.5) y el comprobante rechazado conserva su e-NCF para trazabilidad;
             // el índice único filtrado excluye rechazados para permitir la reutilización declarada

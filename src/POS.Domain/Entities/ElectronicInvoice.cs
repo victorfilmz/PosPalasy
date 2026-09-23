@@ -109,6 +109,20 @@ public class ElectronicInvoice : BaseEntity
     public string? ARECFXML { get; set; }
     public string? ACECFXML { get; set; }
 
+    // Régimen de contingencia (FASE 6.1): metadato local del emisor. Los XSD e-CF v1.0 no llevan
+    // campo XML de contingencia; el tipo se declara al transmitir el comprobante diferido.
+    /// <summary>Tipo de contingencia declarada (1–5 según reglamento); null si no hubo contingencia.</summary>
+    public TipoContingenciaDgii? TipoContingencia { get; set; }
+
+    /// <summary>Inicio de la contingencia declarada (UTC); null si no hubo contingencia.</summary>
+    public DateTime? ContingenciaDesdeUtc { get; set; }
+
+    /// <summary>
+    /// Fin de la ventana normativa de 30 días para transmitir (derivada del inicio, no configurable).
+    /// Si la ventana vence, el comprobante no se transmite: se anula el rango y se reemite.
+    /// </summary>
+    public DateTime? ContingenciaHastaUtc { get; set; }
+
     // Items fiscales
     public ICollection<InvoiceItem> Items { get; set; } = new List<InvoiceItem>();
 }

@@ -319,6 +319,20 @@ public sealed class ProcesarVentaHandler
         }
         catch (Exception ex)
         {
+            // Contingencia de la DGII (6.1): el comprobante nació sin transmisión. Se declara la
+            // contingencia oficial (FallaPlataformaDgii) con su ventana normativa de 30 días; la
+            // cola reintenta sola. La venta queda intacta.
+            var comprobanteCaído = await _invoiceRepo.GetByIdAsync(comprobante.ElectronicInvoiceId, ct);
+            DateTime? ventanaHasta = null;
+            if (comprobanteCaído != null)
+            {
+                var declaracion = ServicioContingencia.Declarar(comprobanteCaído,
+                    new DeclararContingenciaCommand(comprobante.ElectronicInvoiceId,
+                        TipoContingenciaDgii.FallaPlataformaDgii, DateTime.UtcNow));
+                ventanaHasta = declaracion.VentanaHastaUtc;
+                await _invoiceRepo.UpdateAsync(comprobanteCaído, ct);
+            }
+
             envio = new ElectronicInvoiceResponse
             {
                 Exitoso = false,
@@ -326,7 +340,9 @@ public sealed class ProcesarVentaHandler
                 Estado = EstadoFacturaElectronica.PendienteReenvio,
                 EstadoEmision = EstadoEmisionECF.Encolada,
                 EsRecuperable = true,
-                Mensaje = $"La venta quedó registrada. No fue posible confirmar la transmisión a la DGII: {ex.Message}"
+                Mensaje = $"La venta quedó registrada. Contingencia declarada ante la DGII" +
+                          (ventanaHasta.HasValue ? $" (ventana de transmisión hasta {ventanaHasta:dd-MM-yyyy})." : ".") +
+                          $" Detalle: {ex.Message}"
             };
         }
 

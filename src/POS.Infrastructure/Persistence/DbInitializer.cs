@@ -318,6 +318,18 @@ IF EXISTS (SELECT * FROM sys.tables WHERE name = 'ElectronicInvoices')
     AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[ElectronicInvoices]') AND name = 'FechaNCFModificado')
     ALTER TABLE [ElectronicInvoices] ADD [FechaNCFModificado] nvarchar(10) NULL;
 
+-- Régimen de contingencia (Fase 6.1): metadato local del emisor. Los XSD e-CF v1.0 no llevan
+-- campo XML de contingencia; el tipo se declara al transmitir el comprobante diferido.
+IF EXISTS (SELECT * FROM sys.tables WHERE name = 'ElectronicInvoices')
+    AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[ElectronicInvoices]') AND name = 'TipoContingencia')
+    ALTER TABLE [ElectronicInvoices] ADD [TipoContingencia] int NULL;
+IF EXISTS (SELECT * FROM sys.tables WHERE name = 'ElectronicInvoices')
+    AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[ElectronicInvoices]') AND name = 'ContingenciaDesdeUtc')
+    ALTER TABLE [ElectronicInvoices] ADD [ContingenciaDesdeUtc] datetime2 NULL;
+IF EXISTS (SELECT * FROM sys.tables WHERE name = 'ElectronicInvoices')
+    AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[ElectronicInvoices]') AND name = 'ContingenciaHastaUtc')
+    ALTER TABLE [ElectronicInvoices] ADD [ContingenciaHastaUtc] datetime2 NULL;
+
 -- Serie E34 (nota de crédito electrónica): la numeración fiscal de las devoluciones.
 IF EXISTS (SELECT * FROM sys.tables WHERE name = 'SecuenciasECF')
     AND NOT EXISTS (SELECT 1 FROM [SecuenciasECF] WHERE [Serie] = 'E34')

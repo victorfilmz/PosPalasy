@@ -233,6 +233,14 @@ internal sealed class EmisorComprobantes
                 "Un comprobante anulado no puede transmitirse.",
                 "COMPROBANTE_ANULADO");
 
+        // Ventana de contingencia (6.1): un comprobante cuya contingencia de 30 días venció NO se
+        // transmite — el reglamento exige anular el rango (ANECF) y reemitir con nueva secuencia.
+        if (!ServicioContingencia.PuedeTransmitirse(invoice, DateTime.UtcNow))
+            throw new ReglaDeNegocioException(
+                $"El comprobante {invoice.eNCF} venció su ventana de contingencia " +
+                $"({invoice.ContingenciaHastaUtc:dd-MM-yyyy}): anule el rango (ANECF) y reemita con nueva secuencia.",
+                "CONTINGENCIA_VENCIDA");
+
         // Exclusión mutua de la transmisión: quien transmite debe poseer el lease del elemento de cola.
         // Así el envío inmediato de la venta y el trabajador en segundo plano nunca envían el mismo
         // comprobante a la vez, y un envío abandonado se retoma cuando el lease vence.
