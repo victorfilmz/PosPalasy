@@ -73,7 +73,7 @@ a ambos.
 | 2 | Cédula/pasaporte a color del **representante legal** (si firma un delegado) | — | ✅ | ☐ |
 | 3 | **RNC de la empresa** activo (constancia de la Oficina Virtual) | ✅ | ✅* | ☐ |
 | 4 | Documento de representación: **Registro Mercantil** vigente / acta de asamblea | ✅ | ✅* | ☐ |
-| 5 | **Carta de autorización firmada por la empresa** (si el firmante no es el representante legal) | — | ✅ | ☐ |
+| 5 | **Carta de autorización firmada por la empresa** (obligatoria aquí: el firmante es apoderado, no el representante legal — **doc 20, ya redactada**) | — | ✅ | ☐ |
 | 6 | **Prueba de vida** (verificación por correo/video según proveedor) | ✅ | ✅ | ☐ |
 | 7 | Correo electrónico y teléfono del solicitante | ✅ | ✅ | ☐ |
 | 8 | Formulario de solicitud de la entidad (en línea) | ✅ | ✅ | ☐ |
@@ -81,6 +81,12 @@ a ambos.
 
 \* Digifirma los pide vía el formulario y la carta de autorización; confirmar el expediente
 exacto al iniciar la solicitud en línea.
+
+**Nota sobre el firmante autorizado:** como el titular será una persona distinta del
+representante legal, además de la carta (doc 20) verificar en la Oficina Virtual DGII que esa
+persona esté registrada/registrable como firmante bajo el RNC — la DGII cruza el firmante del
+e-CF contra sus registros. Si el apoderado aún no consta ante la DGII, registrar el poder en
+la Oficina Virtual antes de emitir comprobantes.
 
 **Reglas del expediente (causas típicas de devolución):**
 
@@ -93,38 +99,49 @@ exacto al iniciar la solicitud en línea.
 
 ---
 
-## 3. Formulario precargado (completar corchetes)
+## 3. Formulario precargado (listo para completar los datos legales)
 
-Datos técnicos para la solicitud — precargar de aquí y verificar contra la DGII:
+Decisión del paquete: **titular del certificado = persona autorizada (apoderado)**, distinta
+del representante legal. Por eso la **carta de autorización es obligatoria** (doc 20) y hay
+que adjuntar la cédula a color **de ambas personas** (titular firmante y representante legal
+que autoriza). El formulario es neutral: sirve para Avansi/Viafirma y para Digifirma.
+
+> **Regla al completar:** los campos legales (RNC, razón social, cédula, dirección) deben
+> coincidir **letra por letra** con el Registro Mercantil y con lo que la DGII tiene registrado
+> para el RNC. Un dato desalineado devuelve el expediente.
 
 ```text
-=== SOLICITANTE (titular del certificado — persona física firmante) ===
-Nombres y apellidos        : [SEGÚN CÉDULA — idéntico a DGII]
+=== SOLICITANTE (titular del certificado — persona física firmante autorizada) ===
+Nombres y apellidos        : [SEGÚN CÉDULA — idéntico a como consta en DGII]
 Tipo y número de documento : Cédula [000-0000000-0]
 Nacionalidad               : Dominicana
 Correo electrónico         : [correo del firmante — revisado a diario]
 Teléfono                   : [809/829/849-000-0000]
-Cargo en la empresa        : [Representante Legal / Apoderado según carta]
+Cargo en la empresa        : Apoderado según carta de autorización (doc 20, adjunta — ya redactada)
 
 === EMPRESA (contribuyente emisor) ===
 Razón social               : [RAZÓN SOCIAL SEGÚN REGISTRO MERCANTIL]
+Nombre comercial           : PosPalasy
 RNC                        : [RNC DE 9 U 11 DÍGITOS — debe coincidir con Enterprise:RNC de PosPalasy]
 Actividad económica        : [DESCRIPCIÓN SEGÚN REGISTRO MERCANTIL]
 Dirección fiscal           : [DIRECCIÓN SEGÚN RNC]
 Registro Mercantil         : [NÚMERO Y FECHA DE REGISTRO — vigente]
 
+=== REPRESENTANTE LEGAL QUE AUTORIZA (firma la carta del doc 20) ===
+Nombres y apellidos        : [SEGÚN REGISTRO MERCANTIL Y DGII]
+Cédula                     : [000-0000000-0] (copia a color adjunta)
+
 === SOLICITUD ===
 Tipo de certificado        : Persona Física — Procesos Tributarios (Avansi)
                              / Certificado de Facturación Electrónica (Digifirma)
-Vigencia                   : [1 año | 2 años — ver recomendación §1]
+Vigencia                   : [1 año | 2 años — ver comparativa §1]
 Uso declarado              : Firma de Comprobantes Fiscales Electrónicos (e-CF)
-                             ante la DGII (Ley 32-23) y trámites en Oficina Virtual
+                             ante la DGII (Ley 32-23) y trámites en Oficina Virtual,
+                             bajo el RNC de la empresa autorizante
 Entidad certificadora      : [Viafirma/Avansi | Cámara de Comercio y Producción de Santo Domingo]
+Documentos adjuntos        : Carta de autorización (doc 20) · cédulas a color (firmante y
+                             representante legal) · constancia RNC · Registro Mercantil
 ```
-
-> **La contraseña del certificado** se define en el formulario (se introduce dos veces).
-> Elegir una contraseña fuerte y **registrarla de inmediato en el gestor de secretos de la
-> empresa**: sin ella el `.pfx` no sirve y NO hay recuperación — toca emitir un certificado nuevo.
 
 ---
 
