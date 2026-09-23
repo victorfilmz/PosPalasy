@@ -62,10 +62,21 @@ las 23:00, `LastTaskResult: 0` en ejecución de prueba forzada). Componentes:
   crea `C:\Backups\PosPalasy`, registra la tarea y corre un backup de prueba).
 - Destino: `C:\Backups\PosPalasy\PosPalasy_DGII_<AAAAMMDD>.bak` (~7.4 MB, 914 páginas, validado).
 
-**Verificación mensual obligatoria:** restaurar el último `.bak` en una base de prueba y comprobar
-que `ElectronicInvoices` y `Ventas` tienen datos. En un servidor SQL de producción (no LocalDB)
-se puede re-habilitar COMPRESSION. La aplicación no versiona el `.pfx` ni las contraseñas:
-documentar su custodia aparte.
+**Verificación mensual — INSTALADA Y AUTOMATIZADA (23-09-2026):** tarea programada
+**"PosPalasy Verificacion Backup"** (1er domingo de mes, 06:00): restaura el último `.bak` en la
+base de prueba `PosPalasy_Verificacion` y comprueba que las tablas fiscales tienen datos. El
+resultado queda en dos lugares:
+
+- **Log:** `%LOCALAPPDATA%\PosPalasy\logs\verificacion-backup-*.log` (línea `SUCCESS` o `FAILURE`)
+- **Visor de Eventos de Windows:** origen `PosPalasyBackup` — Id 100 SUCCESS, Id 101/102/103 FAILURE
+
+Verificado el 23-09-2026: restauración real del primer `.bak` con 6 comprobantes encontrados y
+evento Id 100 SUCCESS registrado. Componentes: `scripts/verificar_restauracion_backup.cmd`
+(lógica) e `scripts/instalar_verificacion_backup.cmd` (instalador, una sola vez como admin).
+La base de prueba queda instalada para inspección manual; cada verificación la reemplaza.
+
+En un servidor SQL de producción (no LocalDB) se puede re-habilitar COMPRESSION. La aplicación
+no versiona el `.pfx` ni las contraseñas: documentar su custodia aparte.
 
 ## 5. Repositorio
 
