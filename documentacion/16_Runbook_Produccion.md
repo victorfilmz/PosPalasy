@@ -16,7 +16,7 @@
 | Logging persistente a archivo con rotación diaria | ✅ Nuevo |
 | Alerta de agotamiento de secuencias e-NCF (≥90% consumido) | ✅ Nuevo |
 | Homologación real testecf | 🔴 Pendiente de credenciales (doc 14) |
-| Backup de SQL Server | 🔴 Responsabilidad de operación (ver §4) |
+| Backup de SQL Server | ✅ **Instalado y verificado 23-09-2026**: tarea programada "PosPalasy Backup Diario" (23:00, retención 30 días), primer .bak generado y validado |
 | Repositorio remoto | 🔴 Push pendiente: los commits locales deben respaldarse (ver §5) |
 
 ## 2. Checklist de puesta en marcha
@@ -46,20 +46,26 @@
   - `CONTINGENCIA` / `EnvioIncierto` — problemas de transmisión; la cola reintentará sola
   - `Error no controlado procesando la cola` — revisar trace completo
 
-## 4. Backups (responsabilidad de operación)
+## 4. Backups — INSTALADO (23-09-2026)
 
 La base contiene ventas, numeración fiscal y trazabilidad DGII: **backup diario obligatorio**.
-Mínimo viable con SQL Server:
 
-```sql
-BACKUP DATABASE [PosPalasy_DGII]
-TO DISK = 'D:\Backups\PosPalasy_DGII_<AAAAMMDD>.bak'
-WITH INIT, CHECKSUM;
-```
+**Instalado y verificado:** tarea programada de Windows **"PosPalasy Backup Diario"** (diaria a
+las 23:00, `LastTaskResult: 0` en ejecución de prueba forzada). Componentes:
 
-Programar como tarea de Windows o job de SQL Agent; retener ≥ 30 días (los e-CF tienen validez
-fiscal prolongada). Verificar el backup restaurándolo en un entorno de prueba cada mes. La
-aplicación no versiona el `.pfx` ni las contraseñas: documentar su custodia aparte.
+- `scripts/backup_pospalasy.sql` — BACKUP con INIT/CHECKSUM + RESTORE VERIFYONLY. **Sin
+  COMPRESSION**: LocalDB/Express no la soporta (hallazgo real de la instalación).
+- `scripts/ejecutar_backup_pospalasy.cmd` — wrapper de la tarea: sqlcmd por **ruta absoluta**
+  (el perfil SYSTEM puede no tenerlo en PATH) + retención `forfiles` 30 días. La lógica vive en
+  el wrapper porque `/TR` de schtasks está limitado a 261 caracteres.
+- `scripts/instalar_backup_pospalasy.cmd` — instalador (ejecutar UNA vez como administrador:
+  crea `C:\Backups\PosPalasy`, registra la tarea y corre un backup de prueba).
+- Destino: `C:\Backups\PosPalasy\PosPalasy_DGII_<AAAAMMDD>.bak` (~7.4 MB, 914 páginas, validado).
+
+**Verificación mensual obligatoria:** restaurar el último `.bak` en una base de prueba y comprobar
+que `ElectronicInvoices` y `Ventas` tienen datos. En un servidor SQL de producción (no LocalDB)
+se puede re-habilitar COMPRESSION. La aplicación no versiona el `.pfx` ni las contraseñas:
+documentar su custodia aparte.
 
 ## 5. Repositorio
 

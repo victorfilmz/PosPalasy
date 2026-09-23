@@ -12,9 +12,10 @@ DECLARE @Fecha varchar(8) = CONVERT(varchar(8), GETDATE(), 112);
 DECLARE @Ruta varchar(500) = 'C:\Backups\PosPalasy\PosPalasy_DGII_' + @Fecha + '.bak';
 
 -- El directorio debe existir: créelo una vez (o el paso 2b lo crea por usted).
+-- SIN COMPRESSION: LocalDB/Express Edition no soporta backup comprimido.
 BACKUP DATABASE [PosPalasy_DGII]
 TO DISK = @Ruta
-WITH INIT, CHECKSUM, COMPRESSION, NAME = 'PosPalasy fiscal backup';
+WITH INIT, CHECKSUM, NAME = 'PosPalasy fiscal backup';
 
 -- Retención: eliminar los .bak de más de 30 días (gestionado por la tarea
 -- programada con forfiles; el SQL no borra archivos del disco).
