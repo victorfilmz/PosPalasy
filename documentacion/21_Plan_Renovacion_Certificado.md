@@ -151,3 +151,53 @@ puede suscribirse al log de eventos y convertir el recordatorio en email/ticket.
 | Identidad del titular y carta de autorización | Doc 20 |
 | Alerta técnica de 30 días (UI + `/health`) | Doc 16 §3 y §6 |
 | Custodia del `.pfx` y su contraseña | Doc 16 §5 (no se versionan) |
+
+---
+
+## 7. Runbook: variables de entorno de la contraseña del certificado
+
+La contraseña del `.pfx` nunca se versiona ni se imprime: vive en dos variables de
+**usuario** (`HKCU\Environment`) que cada consumidor lee al arrancar.
+
+| Variable | Quién la lee | Momento |
+|---|---|---|
+| `POSPALASY_CERTPWD` | `scripts/recordatorio_certificado.cmd` (tarea programada 08:00) | Cada run del recordatorio |
+| `Certificado__Password` | La app PosPalasy → `Certificado:Password` (`ProveedorCertificadoDigital`) | Cada arranque: health check, firma e-CF y autenticación DGII |
+
+> El nombre `Certificado__Password` usa el doble guion bajo de ASP.NET Core: se mapea
+> automáticamente a la clave de configuración `Certificado:Password`. No lleva prefijo
+> `POSPALASY_` — la app lee variables de entorno sin prefijo.
+
+### 7.1 Definir o actualizar las dos variables
+
+Ejecutar en PowerShell (sin administrador; el valor no se muestra en pantalla ni queda
+en el historial del archivo de comandos):
+
+```powershell
+[Environment]::SetEnvironmentVariable('POSPALASY_CERTPWD',     '<contrasena>', 'User')
+[Environment]::SetEnvironmentVariable('Certificado__Password', '<contrasena>', 'User')
+```
+
+### 7.2 Al instalar el certificado real (ventana de corte D-30)
+
+1. Cargar el `.pfx` nuevo en `%LOCALAPPDATA%\PosPalasy\certificados\emisor.pfx`
+   (página **Certificado Digital DGII** de la app, o copia directa del archivo).
+2. Actualizar **ambas** variables con la contraseña del certificado nuevo (§7.1).
+3. Reiniciar la app y verificar:
+   - `/health` → `Degraded` solo por los días restantes (no por contraseña incorrecta).
+   - Página **Certificado Digital DGII** → «Válido y Activo» con el nuevo titular y vigencia.
+   - `scripts/recordatorio_certificado.cmd` a mano → log con el vencimiento nuevo.
+4. Registrar la contraseña en el gestor de secretos (doc 21 §3, paso D-30).
+
+### 7.3 Diagnóstico rápido
+
+| Síntoma | Causa | Corrección |
+|---|---|---|
+| `/health` degradado con «password may be incorrect» | `Certificado__Password` vacía o desactualizada | §7.1 y reiniciar la app |
+| Evento Id 201 del recordatorio: «variable no definida» | `POSPALASY_CERTPWD` vacía para la tarea programada | §7.1; la tarea la lee en cada run, no requiere reinicio |
+| Evento Id 201: «no se pudo leer el vencimiento» | Contraseña errónea o `.pfx` corrupto | Verificar `.pfx` (doc 16 §2) y §7.1 |
+| La app firma pero el recordatorio falla (o viceversa) | Solo una de las dos variables actualizada | Actualizar ambas (§7.1) |
+
+Cambiar la contraseña de las variables **no exige reiniciar la tarea programada** (el
+script lee el entorno en cada ejecución), pero la app **sí** hay que reiniciarla para
+que relea su entorno.
