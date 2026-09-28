@@ -318,6 +318,19 @@ IF EXISTS (SELECT * FROM sys.tables WHERE name = 'ElectronicInvoices')
     AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[ElectronicInvoices]') AND name = 'FechaNCFModificado')
     ALTER TABLE [ElectronicInvoices] ADD [FechaNCFModificado] nvarchar(10) NULL;
 
+-- Trazabilidad oficial de la DGII (Fase 5): estado textual, mensajes y marca de secuencia
+-- utilizada. Añadidas tras el EnsureCreated de bases existentes; el Dashboard y la cola
+-- de emisión las consultan al arrancar.
+IF EXISTS (SELECT * FROM sys.tables WHERE name = 'ElectronicInvoices')
+    AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[ElectronicInvoices]') AND name = 'EstadoDgii')
+    ALTER TABLE [ElectronicInvoices] ADD [EstadoDgii] nvarchar(max) NULL;
+IF EXISTS (SELECT * FROM sys.tables WHERE name = 'ElectronicInvoices')
+    AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[ElectronicInvoices]') AND name = 'MensajesDgii')
+    ALTER TABLE [ElectronicInvoices] ADD [MensajesDgii] nvarchar(max) NULL;
+IF EXISTS (SELECT * FROM sys.tables WHERE name = 'ElectronicInvoices')
+    AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[ElectronicInvoices]') AND name = 'SecuenciaUtilizada')
+    ALTER TABLE [ElectronicInvoices] ADD [SecuenciaUtilizada] bit NULL;
+
 -- Régimen de contingencia (Fase 6.1): metadato local del emisor. Los XSD e-CF v1.0 no llevan
 -- campo XML de contingencia; el tipo se declara al transmitir el comprobante diferido.
 IF EXISTS (SELECT * FROM sys.tables WHERE name = 'ElectronicInvoices')
