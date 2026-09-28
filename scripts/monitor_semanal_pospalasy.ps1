@@ -69,15 +69,39 @@ foreach ($t in $vigiladas) {
   }
 }
 
-# --- 2) Eventos Id 201 (error) de PosPalasyCert en los ultimos 7 dias ---
+# --- 2) Eventos PosPalasyCert en los ultimos 7 dias ---
 $desde = (Get-Date).AddDays(-7)
 try {
-  $err = @(Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='PosPalasyCert'; Id=201; StartTime=$desde} -ErrorAction Stop)
+  $evs = @(Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='PosPalasyCert'; StartTime=$desde} -ErrorAction Stop)
 } catch {
-  $err = @()  # sin eventos = sin errores
+  $evs = @()  # sin eventos
 }
+
+# 2a) Id 103 = ULTIMA BARRERA (D-7): escalamiento inmediato. Cualquier Id 103 en los
+#     ultimos 7 dias fuerza el veredicto REQUIERE ATENCION con exit 1. Las trazas del
+#     simulador (scripts/simular_recordatorio_d7.ps1) se distinguen por llevar la marca
+#     "(SIMULACION con certificado temporal)" en el mensaje y NO cuentan como reales.
+$ids103 = @($evs | Where-Object { $_.Id -eq 103 })
+$ids103Reales = @($ids103 | Where-Object { $_.Message -notmatch 'SIMULACION con certificado temporal' })
+if ($ids103Reales.Count -gt 0) {
+  Log "ESCALAMIENTO: $($ids103Reales.Count) evento(s) Id 103 (ULTIMA BARRERA D-7) en los ultimos 7 dias:"
+  foreach ($e in $ids103Reales) {
+    Log ("  {0:yyyy-MM-dd HH:mm} | {1}" -f $e.TimeCreated, ($e.Message -replace "`r`n", ' '))
+  }
+  Log "  Accion inmediata: instalar el .pfx nuevo HOY (doc 21 §3 fase D-7, doc 19)."
+  $problemas += 2   # escalamiento pesa doble: no se ignora ni se difiere
+} else {
+  if ($ids103.Count -gt 0) {
+    Log "OK: $($ids103.Count) evento(s) Id 103 pero todos de SIMULACION (sin certificado temporal real en riesgo)."
+  } else {
+    Log "OK: sin eventos Id 103 (ultima barrera) en los ultimos 7 dias."
+  }
+}
+
+# 2b) Id 201 = error del recordatorio (variable sin definir, .pfx ausente o contrasena erronea)
+$err = @($evs | Where-Object { $_.Id -eq 201 })
 if ($err.Count -gt 0) {
-  Log "FALLO: $($_err.Count) evento(s) Id 201 (error del recordatorio) en los ultimos 7 dias:"
+  Log "FALLO: $($err.Count) evento(s) Id 201 (error del recordatorio) en los ultimos 7 dias:"
   foreach ($e in $err) {
     Log ("  {0:yyyy-MM-dd HH:mm} | {1}" -f $e.TimeCreated, ($e.Message -replace "`r`n", ' '))
   }
