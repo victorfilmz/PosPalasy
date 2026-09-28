@@ -126,6 +126,28 @@ Evento PosPalasyCert Id 103 (D-7)  : última barrera antes del vencimiento
 Los eventos son el canal de integración: cualquier monitor (Zabbix, PRTG, un script de correo)
 puede suscribirse al log de eventos y convertir el recordatorio en email/ticket.
 
+### 4.1 Instalación en producción y verificación del primer run
+
+**Instalado el 28-09-2026** en la máquina de producción (Windows, `victor`):
+
+- Tarea **`PosPalasy Recordatorio Certificado`** — diaria 08:00, `RL HIGHEST`, próxima
+  ejecución 29-09-2026 08:00.
+- Runs de prueba del día de instalación (todos con evento Id 101 D-30 y sin Id 201):
+  13:16 y 13:22 (instalador y verificación) y 15:23 vía `schtasks /Run` — este último
+  demostró que la tarea **no elevada** puede escribir en el Visor de Eventos.
+- `POSPALASY_CERTPWD` definida a nivel usuario (doc 21 §7) — requisito del script.
+
+**Canales de verificación de cada run** (los tres deben coincidir en la marca de tiempo):
+
+| Canal | Qué buscar |
+|---|---|
+| Log `%LOCALAPPDATA%\PosPalasy\logs\recordatorio-certificado.log` | Bloque «inicio → Certificado vence … → EVENTO Id N → fin» a las ~08:00 |
+| Visor de Eventos, log Application, origen `PosPalasyCert` | Evento Id 100/101/102/103 (o 200) entre 08:00 y 08:59 |
+| Tarea programada | «Última hora de ejecución» de hoy 08:00 y estado Listo |
+
+No debe existir **ningún evento Id 201** (error: `.pfx` ausente, variable sin definir o
+contraseña errónea) — si aparece, doc 21 §7.3 indica la corrección.
+
 ---
 
 ## 5. Errores que este plan evita
