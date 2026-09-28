@@ -331,6 +331,13 @@ IF EXISTS (SELECT * FROM sys.tables WHERE name = 'ElectronicInvoices')
     AND NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[ElectronicInvoices]') AND name = 'SecuenciaUtilizada')
     ALTER TABLE [ElectronicInvoices] ADD [SecuenciaUtilizada] bit NULL;
 
+-- FechaEnvio es el momento de la transmisión a la DGII: el e-CF nace en estado Pendiente
+-- (sin enviar) y bases previas la crearon NOT NULL, lo que impide registrar la venta
+-- antes de transmitir. Se relaja a NULL (idempotente; la primera pasada puede tardar
+-- unos segundos si la tabla tiene filas).
+IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID(N'[ElectronicInvoices]') AND name = 'FechaEnvio' AND is_nullable = 0)
+    ALTER TABLE [ElectronicInvoices] ALTER COLUMN [FechaEnvio] datetime2 NULL;
+
 -- Régimen de contingencia (Fase 6.1): metadato local del emisor. Los XSD e-CF v1.0 no llevan
 -- campo XML de contingencia; el tipo se declara al transmitir el comprobante diferido.
 IF EXISTS (SELECT * FROM sys.tables WHERE name = 'ElectronicInvoices')
