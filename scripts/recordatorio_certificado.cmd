@@ -3,7 +3,7 @@ REM =====================================================================
 REM PosPalasy - Recordatorio de renovacion del certificado digital
 REM (doc 21). Lee la fecha de vencimiento REAL del .pfx activo, calcula
 REM dias restantes y registra el resultado en DOS canales:
-REM   - Log de PosPalasy: %LOCALAPPDATA%\\PosPalasy\\logs\\recordatorio-certificado-*.log
+REM   - Log de PosPalasy: %LOCALAPPDATA%\%PosPalasy%\logs\recordatorio-certificado-*.log
 REM   - Visor de Eventos de Windows (origen PosPalasyCert):
 REM       Id 100 = D-60 iniciar tramite
 REM       Id 101 = D-30 certificado nuevo listo + ventana de corte
@@ -48,6 +48,12 @@ if "%POSPALASY_CERTPWD%"=="" (
 
 REM Fecha de vencimiento REAL del .pfx activo (NotAfter) y dias restantes,
 REM en UNA sola llamada de PowerShell: una linea "VENCE;DIAS".
+REM Debe ser UNA sola linea fisica: cmd no admite saltos de linea dentro
+REM del comando backquoteado de for /f. Si PowerShell falla (contrasena
+REM erronea, .pfx corrupto) no emite salida y DIAS queda vacio, lo que
+REM dispara la validacion estricta de mas abajo.
+REM La contrasena NUNCA se expande por cmd: PowerShell la lee directo de
+REM $env:POSPALASY_CERTPWD y no se imprime en ningun canal.
 for /f "usebackq tokens=1,2 delims=;" %%A in (`powershell -NoProfile -Command "$c = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2('%PFX%', $env:POSPALASY_CERTPWD); Write-Output ($c.NotAfter.ToString('yyyy-MM-dd') + ';' + [int]($c.NotAfter - (Get-Date)).TotalDays)"`) do (
   set "VENCE=%%A"
   set "DIAS=%%B"
