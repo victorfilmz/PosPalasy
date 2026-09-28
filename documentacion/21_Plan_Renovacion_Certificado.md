@@ -148,6 +148,27 @@ puede suscribirse al log de eventos y convertir el recordatorio en email/ticket.
 No debe existir **ningún evento Id 201** (error: `.pfx` ausente, variable sin definir o
 contraseña errónea) — si aparece, doc 21 §7.3 indica la corrección.
 
+### 4.2 Evidencia de validación del calendario (28-09-2026)
+
+El calendario de la sección 3 está validado en sus dos extremos con herramientas versionadas:
+
+| Fase validada | Herramienta | Resultado |
+|---|---|---|
+| Aritmética de todos los umbrales | `tools/HomologacionTestECF/dryrun/PruebaRecordatorio` (`dotnet run`) | 13/13 casos PASS + monotonía en 95..-5 días: cada recordatorio dispara a tiempo o un día antes (dirección segura), nunca después |
+| Fase D-30, end-to-end real | Certificado real (25 días), tarea instalada | Evento Id 101 D-30 en el Visor de Eventos, alineado con `/health = Degraded` |
+| Fase D-7, end-to-end simulado | `scripts/simular_recordatorio_d7.ps1` | Evento Id 103 **nivel ERROR** emitido y verificado en el Visor de Eventos con mensaje de escalamiento, marcado «(SIMULACION con certificado temporal)» |
+
+El simulador genera un certificado temporal self-signed que vence en 7 días, aplica la
+misma aritmética del recordatorio, emite el evento real vía `eventcreate` y limpia el
+store y `%TEMP%`. No toca el `.pfx` de producción ni usa contraseñas reales; el guard
+interno falla si la aritmética no mapeara 7 días → Id 103.
+
+**Conclusión**: cuando el certificado real llegue a D-7, la tarea de las 08:00 emitirá
+el evento Id 103 de nivel ERROR con el mensaje de escalamiento, y cualquier monitor
+externo suscrito al origen `PosPalasyCert` lo recibirá. Las trazas de la simulación
+quedan en el Visor de Eventos claramente marcadas, de modo que no contaminan la
+interpretación de alertas reales.
+
 ---
 
 ## 5. Errores que este plan evita
