@@ -7,9 +7,15 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Evita corridas duplicadas: un push nuevo cancela el job en curso del mismo branch.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-test:
     runs-on: windows-latest   # la app usa localdb, %LOCALAPPDATA% y rutas Windows
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
@@ -24,10 +30,17 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Restore y build
+      - name: Restore y build de la solución
         run: |
           dotnet restore
           dotnet build --no-restore -c Debug
+
+      - name: Preparar instancia LocalDB
+        shell: pwsh
+        run: |
+          sqllocaldb create MSSQLLocalDB -s 2>$null
+          sqllocaldb start MSSQLLocalDB 2>$null
+          sqllocaldb info MSSQLLocalDB
 
       - name: Generar certificado de prueba (emisor.pfx)
         shell: pwsh
@@ -57,7 +70,9 @@ jobs:
         run: npx playwright install chromium
         working-directory: tests/E2E
 
-      - name: Tests E2E (BD aislada PosPalasy_DGII_E2E, app en :5199)
+      # El global-setup de Playwright recrea la BD PosPalasy_DGII_E2E, levanta la app en
+      # http://localhost:5199 (build propio en tests/E2E/.app-build) y la detiene al final.
+      - name: Tests E2E completos (36 tests, BD aislada PosPalasy_DGII_E2E)
         working-directory: tests/E2E
         env:
           Certificado__Password: ci-test-password
@@ -71,4 +86,15 @@ jobs:
           path: |
             tests/E2E/playwright-report/
             tests/E2E/test-results/
+          retention-days: 7
+
+      - name: Subir logs de la app E2E si falla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-e2e-logs
+          path: |
+            tests/E2E/.app-build/**/*.log
+            tests/E2E/app-debug.log
+          if-no-files-found: ignore
           retention-days: 7
