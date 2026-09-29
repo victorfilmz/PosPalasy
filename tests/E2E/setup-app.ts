@@ -45,9 +45,10 @@ export async function setup() {
   app.stdout!.on('data', (d: Buffer) => process.stdout.write(`[app] ${d}`));
   app.stderr!.on('data', (d: Buffer) => process.stderr.write(`[app:err] ${d}`));
 
-  // 3. Esperar a que /health responda (incluye el seed inicial).
+  // 3. Esperar a que /health responda (incluye el seed inicial y el build en frío de dotnet,
+  //    que en una máquina lenta puede tardar ~2 minutos).
   const inicio = Date.now();
-  while (Date.now() - inicio < 120_000) {
+  while (Date.now() - inicio < 300_000) {
     try {
       const r = await fetch(`${E2E_APP_URL}/health`);
       if (r.ok) {
@@ -57,7 +58,7 @@ export async function setup() {
     } catch { /* aún no arranca */ }
     await wait(2000);
   }
-  throw new Error('[E2E] La app no respondió /health en 120s');
+  throw new Error('[E2E] La app no respondió /health en 300s');
 }
 
 export async function teardown() {
