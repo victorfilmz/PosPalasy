@@ -24,9 +24,14 @@ export async function asegurarTurnoAbierto(page: Page) {
   const linkApertura = page.getByRole('link', { name: /apertura|abrir/i }).first();
   if (await linkApertura.isVisible().catch(() => false)) {
     await linkApertura.click();
-    await page.getByLabel(/cajero/i).fill('Cajero E2E');
-    await page.getByLabel(/monto/i).fill('1000');
-    await page.getByRole('button', { name: /abrir|guardar/i }).click();
+    // El textbox del cajero no tiene label asociado; viene precargado con "Cajero Principal".
+    await page.locator('form input[type="text"]').first().fill('Cajero E2E');
+    await page.getByRole('button', { name: /Confirmar y Abrir/i }).click();
     await page.waitForLoadState('networkidle');
+  }
+  // Verificación dura: si al volver a /Caja sigue el link de apertura, el turno NO quedó abierto.
+  await page.goto('/Caja');
+  if (await page.getByRole('link', { name: /apertura|abrir/i }).first().isVisible().catch(() => false)) {
+    throw new Error('No fue posible abrir el turno de caja: la venta no podrá cobrarse.');
   }
 }
