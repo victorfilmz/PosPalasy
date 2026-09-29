@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    runs-on: windows-latest   # la app usa localdb, %LOCALAPPDATA% y rutas Windows
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Restore y build
+        run: |
+          dotnet restore
+          dotnet build --no-restore -c Debug
+
+      - name: Generar certificado de prueba (emisor.pfx)
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:LOCALAPPDATA "PosPalasy/certificados"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          $pfx = Join-Path $dir "emisor.pfx"
+          $pwdFile = Join-Path $env:TEMP "certpwd.txt"
+          "ci-test-password" | Out-File -FilePath $pwdFile -Encoding ascii
+          openssl req -x509 -newkey rsa:3072 -sha256 -days 365 -nodes `
+            -keyout (Join-Path $env:TEMP "ci-key.pem") `
+            -out (Join-Path $env:TEMP "ci-cert.pem") `
+            -subj "//CN=CI Homologacion//O=PosPalasy"
+          openssl pkcs12 -export -inkey (Join-Path $env:TEMP "ci-key.pem") `
+            -in (Join-Path $env:TEMP "ci-cert.pem") `
+            -out $pfx -passout file:$pwdFile
+          Write-Host "Certificado generado en $pfx"
+
+      - name: Tests unitarios/integración (.NET)
+        run: dotnet test tests/POS.Ventas.Tests -c Debug --no-build --filter "FullyQualifiedName~ResultadoFiscalIntegrationTests"
+
+      - name: Instalar dependencias E2E
+        run: npm ci
+        working-directory: tests/E2E
+
+      - name: Instalar Chromium para Playwright
+        run: npx playwright install chromium
+        working-directory: tests/E2E
+
+      - name: Tests E2E (BD aislada PosPalasy_DGII_E2E, app en :5199)
+        working-directory: tests/E2E
+        env:
+          Certificado__Password: ci-test-password
+        run: npx playwright test --retries=1
+
+      - name: Subir reporte y trazas si falla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            tests/E2E/playwright-report/
+            tests/E2E/test-results/
+          retention-days: 7
