@@ -1,5 +1,5 @@
-import { test, expect } from '@playwright/test';
-import { login } from '../helpers';
+import { expect } from '@playwright/test';
+import { login, test } from '../helpers';
 
 test.describe('Login y sesión', () => {
   test('login con credenciales válidas lleva al Dashboard', async ({ page }) => {

@@ -3,7 +3,8 @@
    ASP.NET Core 10 MVC + Bootstrap 5.3 + Custom CSS Tokens
    ========================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
+/* Inter + Plus Jakarta Sans auto-hospedadas (copias latin) — ver wwwroot/fonts */
+@import url('fonts.css');
 
 :root {
   /* Dimensions */

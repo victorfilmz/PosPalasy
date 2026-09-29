@@ -1,5 +1,5 @@
-import { test, expect } from '@playwright/test';
-import { test as authedTest } from '../helpers';
+import { expect } from '@playwright/test';
+import { test, test as authedTest } from '../helpers';
 
 const RUTAS = [
   '/',

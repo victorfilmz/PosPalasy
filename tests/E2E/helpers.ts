@@ -3,7 +3,34 @@ import { test as base, expect, Page } from '@playwright/test';
 export const ADMIN_USER = 'admin';
 export const ADMIN_PASS = 'PosPalasy#2026$Prod';
 
-export const test = base.extend<{ authedPage: Page }>({
+/**
+ * Garantía offline: aborta toda petición saliente que no sea al propio servidor E2E
+ * (localhost/127.0.0.1). Si la app intenta cargar un CDN u otro recurso externo,
+ * la petición se registra y el test en curso falla al terminar.
+ */
+export const test = base.extend<{ authedPage: Page; bloquearExternos: void }>({
+  bloquearExternos: [
+    async ({ page, baseURL }, use) => {
+      const origenesExternos = new Set<string>();
+      await page.route(/^https?:\/\//i, (route) => {
+        const url = route.request().url();
+        const base = baseURL ?? 'http://localhost:5199';
+        if (url.startsWith(base) || url.startsWith('http://localhost:') || url.startsWith('http://127.0.0.1:')) {
+          return route.continue();
+        }
+        origenesExternos.add(url);
+        return route.abort();
+      });
+      await use();
+      if (origenesExternos.size > 0) {
+        throw new Error(
+          `La app hizo ${origenesExternos.size} petición(es) externa(s) — no es 100% offline:\n  ` +
+            [...origenesExternos].slice(0, 10).join('\n  '),
+        );
+      }
+    },
+    { auto: true },
+  ],
   authedPage: async ({ page }, use) => {
     await login(page);
     await use(page);
