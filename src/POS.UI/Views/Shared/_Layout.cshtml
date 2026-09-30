@@ -145,10 +145,13 @@
                 </div>
 
                 <div class="topbar-right">
-                    <!-- Estado DGII en Vivo -->
-                    <div class="dgii-status-pill" title="Ambiente de Facturación Electrónica Activo">
+        @inject POS.Infrastructure.DGII.DgiiConfig DgiiCfg
+            <!-- Estado DGII en Vivo (modo dinámico según configuración) -->
+                    <div class="dgii-status-pill" title="@(DgiiCfg.ModoSimulador
+                        ? "MODO SIMULADOR: la facturación electrónica se procesa localmente, sin conectar con la DGII."
+                        : $"DGII REAL ({DgiiCfg.Ambiente}): las transmisiones requieren conectividad con {DgiiCfg.HostECF()}.")">
                         <span class="dgii-pulse"></span>
-                        <span>DGII En Línea <span class="d-none d-sm-inline">(TestECF)</span></span>
+                        <span>@(DgiiCfg.ModoSimulador ? "DGII Simulador" : $"DGII En Línea ({DgiiCfg.Ambiente})")</span>
                     </div>
 
                     <!-- Usuario en sesión y cierre de sesión -->

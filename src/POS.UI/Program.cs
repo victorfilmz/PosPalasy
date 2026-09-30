@@ -144,7 +144,8 @@ builder.Services.AddHttpClient<IDgiiApiClient, DgiiApiClient>()
 builder.Services.AddHealthChecks()
     .AddDbContextCheck<POSDbContext>("base-de-datos")
     .AddCheck<CertificadoDigitalHealthCheck>("certificado-digital", HealthStatus.Degraded)
-    .AddCheck<WorkerColaDgiiHealthCheck>("worker-cola-dgii", HealthStatus.Degraded);
+    .AddCheck<WorkerColaDgiiHealthCheck>("worker-cola-dgii", HealthStatus.Degraded)
+    .AddCheck<DgiiConectividadHealthCheck>("dgii-conectividad", HealthStatus.Degraded);
 
 // Repositorios
 builder.Services.AddScoped<IInvoiceRepository, InvoiceRepository>();
@@ -181,6 +182,7 @@ builder.Services.AddSingleton<IFirmadorComprobanteECF, FirmadorComprobanteECF>()
 // Health checks concretos (usados por el mapa /health)
 builder.Services.AddSingleton<CertificadoDigitalHealthCheck>();
 builder.Services.AddSingleton<WorkerColaDgiiHealthCheck>();
+builder.Services.AddSingleton<DgiiConectividadHealthCheck>();
 builder.Services.AddSingleton<POS.UI.Services.DgiiQueueBackgroundService>();
 builder.Services.AddScoped<IElectronicInvoiceService>(sp => new DgiiElectronicInvoiceService(
     sp.GetRequiredService<IXmlSerializer>(),
