@@ -57,4 +57,4 @@ No hay ninguna otra llamada saliente: ni telemetría, ni actualizaciones automá
 | Homologación / pre-certificación | `false` | cualquiera | Necesaria (TestECF) |
 | Producción DGII real | `false` | cualquiera | Necesaria (ecf) + certificado de producción (vence **2026-10-23**) |
 
-Nota operativa: la app se reinicia desde `bin/Debug/net10.0/POS.UI.exe --urls http://localhost:5099`; si se relanza sin la variable `ASPNETCORE_ENVIRONMENT=Development` con el simulador activo, aborta por diseño (ver `Program.cs` línea 207).
+Nota operativa: la app se reinicia desde `bin/Debug/net10.0/POS.UI.exe --urls http://localhost:5099`; si se relanza sin la variable `ASPNETCORE_ENVIRONMENT=Development` con el simulador activo, aborta por diseño (ver `Program.cs` línea 207). La variable está fijada de forma persistente a nivel usuario (además del script de arranque, que la fija en cada corrida) y existe `scripts/reiniciar_pospalasy.ps1` para reinicios manuales seguros con el mismo entorno.
